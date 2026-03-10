@@ -30,6 +30,17 @@ export async function deriveKey(password, saltString) {
     );
 }
 
+// Helper function to convert large arrays to base64 without stack overflow
+function arrayToBase64(arr) {
+    const chunkSize = 8192; // Process in 8KB chunks
+    let result = '';
+    for (let i = 0; i < arr.length; i += chunkSize) {
+        const chunk = arr.slice(i, i + chunkSize);
+        result += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(result);
+}
+
 // Encrypts a message returning a base64 encoded ciphertext and IV
 export async function encryptMessage(key, messageText) {
     const enc = new TextEncoder();
@@ -43,12 +54,22 @@ export async function encryptMessage(key, messageText) {
     );
 
     const ciphertextArr = Array.from(new Uint8Array(ciphertextBuf));
-    const ciphertextBase64 = btoa(String.fromCharCode.apply(null, ciphertextArr));
+    const ciphertextBase64 = arrayToBase64(ciphertextArr);
 
     const ivArr = Array.from(iv);
-    const ivBase64 = btoa(String.fromCharCode.apply(null, ivArr));
+    const ivBase64 = arrayToBase64(ivArr);
 
     return { ciphertext: ciphertextBase64, iv: ivBase64 };
+}
+
+// Helper function to safely convert base64 string to Uint8Array without stack overflow
+function base64ToArray(base64String) {
+    const binaryString = atob(base64String);
+    const arr = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        arr[i] = binaryString.charCodeAt(i);
+    }
+    return arr;
 }
 
 // Decrypts a base64 encoded payload
@@ -57,18 +78,10 @@ export async function decryptMessage(key, encryptedData) {
         const dec = new TextDecoder();
 
         // Decode base64 iv
-        const ivString = atob(encryptedData.iv);
-        const iv = new Uint8Array(ivString.length);
-        for (let i = 0; i < ivString.length; i++) {
-            iv[i] = ivString.charCodeAt(i);
-        }
+        const iv = base64ToArray(encryptedData.iv);
 
         // Decode base64 ciphertext
-        const ctString = atob(encryptedData.ciphertext);
-        const ciphertext = new Uint8Array(ctString.length);
-        for (let i = 0; i < ctString.length; i++) {
-            ciphertext[i] = ctString.charCodeAt(i);
-        }
+        const ciphertext = base64ToArray(encryptedData.ciphertext);
 
         const decryptedBuf = await crypto.subtle.decrypt(
             { name: 'AES-GCM', iv },
