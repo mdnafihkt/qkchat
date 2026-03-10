@@ -192,6 +192,14 @@ body,
     flex-shrink: 0;
 }
 
+.file-icon.pdf-icon {
+    color: #e74c3c;
+}
+
+.file-icon.presentation-icon {
+    color: #f39c12;
+}
+
 .file-info {
     flex: 1;
     min-width: 0;
@@ -204,6 +212,16 @@ body,
     text-overflow: ellipsis;
     font-size: 0.9rem;
     font-weight: 500;
+}
+
+.file-type {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.2rem;
 }
 
 .download-btn {

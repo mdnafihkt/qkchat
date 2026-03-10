@@ -7,10 +7,37 @@ import {
   Paperclip,
   File,
   Download,
+  FileText,
+  FileSpreadsheet,
+  FileMusic,
+  AlertCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage } from "../../utils/crypto";
 import "./ChatPage.css";
+
+// Supported document file types
+const SUPPORTED_DOCUMENT_TYPES = {
+  "application/pdf": { ext: "pdf", name: "PDF" },
+  "application/msword": { ext: "doc", name: "Word Document" },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+    ext: "docx",
+    name: "Word Document",
+  },
+  "application/vnd.ms-powerpoint": { ext: "ppt", name: "PowerPoint" },
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
+    ext: "pptx",
+    name: "PowerPoint",
+  },
+  "application/vnd.ms-excel": { ext: "xls", name: "Excel Spreadsheet" },
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+    ext: "xlsx",
+    name: "Excel Spreadsheet",
+  },
+  "text/plain": { ext: "txt", name: "Text File" },
+  "text/csv": { ext: "csv", name: "CSV File" },
+  "application/zip": { ext: "zip", name: "ZIP Archive" },
+};
 
 export default function ChatPage({
   socket,
@@ -74,13 +101,39 @@ export default function ChatPage({
     }
   };
 
+  const getFileIcon = (fileType) => {
+    if (fileType.startsWith("image/")) return "image";
+    if (fileType.includes("pdf")) return "pdf";
+    if (fileType.includes("spreadsheet") || fileType.includes("excel"))
+      return "spreadsheet";
+    if (fileType.includes("word") || fileType.includes("document"))
+      return "document";
+    if (fileType.includes("presentation") || fileType.includes("powerpoint"))
+      return "presentation";
+    return "file";
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file || !socket || !cryptoKey) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("File size must be less than 5MB");
+    // Check file size (50MB limit for documents)
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert(
+        `File size must be less than ${maxSize / (1024 * 1024)}MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`
+      );
       return;
+    }
+
+    // Optional: Check if file type is supported (allows all files but alerts user)
+    const isSupported = Object.keys(SUPPORTED_DOCUMENT_TYPES).includes(
+      file.type
+    );
+    if (!isSupported) {
+      console.warn(
+        `File type "${file.type}" not in primary supported list, but sending anyway.`
+      );
     }
 
     const reader = new FileReader();
@@ -93,6 +146,7 @@ export default function ChatPage({
           fileName: file.name,
           fileType: file.type,
           fileData: base64Data,
+          fileIcon: getFileIcon(file.type),
         });
         const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
@@ -190,11 +244,24 @@ export default function ChatPage({
                   />
                 ) : (
                   <div className="attached-file">
-                    <File size={24} className="file-icon" />
+                    {msg.fileIcon === "pdf" ? (
+                      <FileText size={24} className="file-icon pdf-icon" />
+                    ) : msg.fileIcon === "spreadsheet" ? (
+                      <FileSpreadsheet size={24} className="file-icon" />
+                    ) : msg.fileIcon === "document" ? (
+                      <FileText size={24} className="file-icon" />
+                    ) : msg.fileIcon === "presentation" ? (
+                      <File size={24} className="file-icon presentation-icon" />
+                    ) : (
+                      <File size={24} className="file-icon" />
+                    )}
                     <div className="file-info">
                       <span className="file-name" title={msg.fileName}>
                         {msg.fileName}
                       </span>
+                      {msg.fileType && (
+                        <span className="file-type">{msg.fileType}</span>
+                      )}
                     </div>
                     <a
                       href={msg.fileData}
@@ -222,12 +289,14 @@ export default function ChatPage({
           ref={fileInputRef}
           style={{ display: "none" }}
           onChange={handleFileChange}
+          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,image/*"
+          title="Attach document or image files (PDF, Word, PowerPoint, Excel, etc.)"
         />
         <button
           type="button"
           className="icon-btn attachment-btn"
           onClick={() => fileInputRef.current?.click()}
-          title="Attach File"
+          title="Attach file: PDF, Word, PowerPoint, Excel, Images, etc."
         >
           <Paperclip size={20} />
         </button>
