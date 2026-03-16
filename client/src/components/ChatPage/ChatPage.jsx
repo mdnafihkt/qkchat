@@ -8,6 +8,8 @@ import {
   Download,
   QrCode,
   X,
+  Copy,
+  CheckCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage } from "../../utils/crypto";
@@ -50,6 +52,7 @@ export default function ChatPage({
   const [showQRCode, setShowQRCode] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [isCopied, setIsCopied] = useState(false);
   const navigate = useNavigate();
 
   // If a user navigates directly to /chat without a socket connection, boot them back.
@@ -181,6 +184,12 @@ export default function ChatPage({
     navigate("/");
   };
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
   if (!socket || !roomId) return null;
 
   return (
@@ -195,7 +204,7 @@ export default function ChatPage({
             Session: {roomId}
             <QrCode size={16} />
           </h2>
-          <p>End-to-End Encrypted</p>
+          <p>E2E Encrypted</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <span
@@ -238,7 +247,18 @@ export default function ChatPage({
                 style={{ height: "auto", maxWidth: "100%", width: "100%" }}
                 viewBox={`0 0 256 256`}
               />
-              <p className="qr-code-text">Scan to join session: {roomId}</p>
+              <p className="qr-code-text">Scan to join session</p>
+              <div
+                className="copyable-field"
+                onClick={() => copyToClipboard(roomId)}
+              >
+                <span>{roomId}</span>
+                {isCopied ? (
+                  <CheckCheck size={16}/>
+                ) : (
+                  <Copy size={16} />
+                )}
+              </div>
             </div>
           </div>
         </div>

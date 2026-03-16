@@ -323,3 +323,28 @@ body,
         max-width: 200px;
     }
 }
+
+.copyable-field{
+    gap: 10px;
+}
+
+@media (max-width: 480px) {
+    .copyable-field {
+        font-size: 0.95rem;
+        padding: 0.8rem 0.75rem;
+    }
+}
+
+/* Icon styling for copyable field */
+.copyable-field svg {
+    color: var(--text-muted) !important;
+    flex-shrink: 0;
+    transition: color 0.2s;
+    background: transparent !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+}
+
+.copyable-field:hover svg {
+    color: var(--text-main) !important;
+}
