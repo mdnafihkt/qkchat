@@ -10,6 +10,8 @@ import {
   X,
   Copy,
   CheckCheck,
+  Check,
+  Clock,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage } from "../../utils/crypto";
@@ -71,33 +73,45 @@ export default function ChatPage({
     e.preventDefault();
     if (!newMessage.trim() || !socket || !cryptoKey) return;
 
+    const messageId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+
+    // Add to local state immediately as 'sending'
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: messageId,
+        type: "text",
+        text: newMessage,
+        isOwn: true,
+        status: "sending",
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+      },
+    ]);
+    
+    const textToSend = newMessage;
+    setNewMessage("");
+
     try {
-      // Create JSON payload indicating text type
-      const payload = JSON.stringify({ type: "text", text: newMessage });
+      // Create JSON payload indicating text type and containing the message ID
+      const payload = JSON.stringify({ id: messageId, type: "text", text: textToSend });
       const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
-      // Send the encrypted blob to the relay server
+      // Send the encrypted blob to the relay server with server acknowledgment callback
       socket.emit("send_message", {
         roomId,
         message: encryptedPayload,
+      }, () => {
+        // Server acknowledged -> update local status to 'sent'
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, status: "sent" } : msg
+          )
+        );
       });
-
-      // Add to local state as our own message
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          type: "text",
-          text: newMessage,
-          isOwn: true,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          }),
-        },
-      ]);
-      setNewMessage("");
     } catch (err) {
       console.error("Failed to send message", err);
     }
@@ -138,12 +152,42 @@ export default function ChatPage({
       );
     }
 
+    const messageId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+
+    // Immediately add to messages list as 'sending' with empty/loading data
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: messageId,
+        type: "file",
+        fileName: file.name,
+        fileType: file.type,
+        fileData: "",
+        fileIcon: getFileIcon(file.type),
+        isOwn: true,
+        status: "sending",
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+      },
+    ]);
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64Data = event.target.result;
 
+      // Update local state with loaded fileData
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, fileData: base64Data } : msg
+        )
+      );
+
       try {
         const payload = JSON.stringify({
+          id: messageId,
           type: "file",
           fileName: file.name,
           fileType: file.type,
@@ -152,25 +196,14 @@ export default function ChatPage({
         });
         const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
-        socket.emit("send_message", { roomId, message: encryptedPayload });
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            type: "file",
-            fileName: file.name,
-            fileType: file.type,
-            fileData: base64Data,
-            fileIcon: getFileIcon(file.type),
-            isOwn: true,
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            }),
-          },
-        ]);
+        socket.emit("send_message", { roomId, message: encryptedPayload }, () => {
+          // Server acknowledged -> update local status to 'sent'
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === messageId ? { ...msg, status: "sent" } : msg
+            )
+          );
+        });
       } catch (err) {
         console.error("Failed to send file", err);
       }
@@ -291,19 +324,28 @@ export default function ChatPage({
               <div className="file-attachment">
                 {msg.fileType && msg.fileType.startsWith("image/") ? (
                   <div className="image-container">
-                    <img
-                      src={msg.fileData}
-                      alt={msg.fileName}
-                      className="attached-image"
-                    />
-                    <a
-                      href={msg.fileData}
-                      download={msg.fileName}
-                      className="image-download-btn"
-                      title="Download Image"
-                    >
-                      <Download size={18} />
-                    </a>
+                    {msg.fileData ? (
+                      <>
+                        <img
+                          src={msg.fileData}
+                          alt={msg.fileName}
+                          className="attached-image"
+                        />
+                        <a
+                          href={msg.fileData}
+                          download={msg.fileName}
+                          className="image-download-btn"
+                          title="Download Image"
+                        >
+                          <Download size={18} />
+                        </a>
+                      </>
+                    ) : (
+                      <div className="image-loading-placeholder">
+                        <Clock size={20} className="spinner-icon" />
+                        <span>Encrypting {msg.fileName}...</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="attached-file">
@@ -316,21 +358,36 @@ export default function ChatPage({
                         <span className="file-type">{msg.fileType}</span>
                       )}
                     </div>
-                    <a
-                      href={msg.fileData}
-                      download={msg.fileName}
-                      className="download-btn"
-                      title="Download"
-                    >
-                      <Download size={18} />
-                    </a>
+                    {msg.fileData ? (
+                      <a
+                        href={msg.fileData}
+                        download={msg.fileName}
+                        className="download-btn"
+                        title="Download"
+                      >
+                        <Download size={18} />
+                      </a>
+                    ) : (
+                      <div className="file-loading-placeholder">
+                        <Clock size={16} className="spinner-icon" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             ) : (
               <div className="text">{msg.text}</div>
             )}
-            <div className="time">{msg.time}</div>
+            <div className="message-meta">
+              <span className="time">{msg.time}</span>
+              {msg.isOwn && (
+                <span className={`status-indicator ${msg.status || "sent"}`} title={msg.status || "sent"}>
+                  {msg.status === "sending" && <Clock size={12} />}
+                  {(msg.status === "sent" || !msg.status) && <Check size={12} />}
+                  {msg.status === "delivered" && <CheckCheck size={12} />}
+                </span>
+              )}
+            </div>
           </div>
         ))}
         <div ref={messagesEndRef} />

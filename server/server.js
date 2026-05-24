@@ -29,7 +29,7 @@ io.on('connection', (socket) => {
 
     // Relay encrypted messages directly to the room
     // We do NOT store anything on the server.
-    socket.on('send_message', (data) => {
+    socket.on('send_message', (data, callback) => {
         const { roomId, message } = data;
         const messageSize = JSON.stringify(message).length;
         console.log(`Relaying message in room: ${roomId} (size: ${(messageSize / 1024 / 1024).toFixed(2)}MB)`);
@@ -37,6 +37,16 @@ io.on('connection', (socket) => {
             senderId: socket.id,
             ...message
         });
+        if (typeof callback === 'function') {
+            callback();
+        }
+    });
+
+    // Relay delivery confirmation back to the sender
+    socket.on('message_delivered', (data) => {
+        const { roomId, messageId, senderId } = data;
+        console.log(`Message delivered in room ${roomId}: ${messageId} to sender ${senderId}`);
+        io.to(senderId).emit('message_delivered', { messageId });
     });
 
     socket.on('disconnect', () => {

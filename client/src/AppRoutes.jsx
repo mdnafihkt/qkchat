@@ -77,6 +77,14 @@ export default function AppRoutes({ SOCKET_URL }) {
           console.log("Another user joined");
         });
 
+        newSocket.on("message_delivered", ({ messageId }) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === messageId ? { ...msg, status: "delivered" } : msg
+            )
+          );
+        });
+
         newSocket.on("receive_message", async (data) => {
           // Ignore messages sent by this client (we already added them locally)
           if (data.senderId === newSocket.id) {
@@ -113,10 +121,11 @@ export default function AppRoutes({ SOCKET_URL }) {
               msgData = { type: "text", text: decryptedText };
             }
 
+            const messageId = msgData.id || Date.now();
             setMessages((prev) => [
               ...prev,
               {
-                id: Date.now(),
+                id: messageId,
                 ...msgData,
                 isOwn: false,
                 time: new Date().toLocaleTimeString([], {
@@ -126,6 +135,15 @@ export default function AppRoutes({ SOCKET_URL }) {
                 }),
               },
             ]);
+
+            // Confirm delivery back to sender
+            if (msgData.id) {
+              newSocket.emit("message_delivered", {
+                roomId: reconnectRoomId,
+                messageId: msgData.id,
+                senderId: data.senderId,
+              });
+            }
           }
         });
       });
@@ -188,6 +206,14 @@ export default function AppRoutes({ SOCKET_URL }) {
           console.log("Another user joined");
         });
 
+        newSocket.on("message_delivered", ({ messageId }) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === messageId ? { ...msg, status: "delivered" } : msg
+            )
+          );
+        });
+
         newSocket.on("receive_message", async (data) => {
           // Ignore messages sent by this client (we already added them locally)
           if (data.senderId === newSocket.id) {
@@ -227,10 +253,11 @@ export default function AppRoutes({ SOCKET_URL }) {
               msgData = { type: "text", text: decryptedText };
             }
 
+            const messageId = msgData.id || Date.now();
             setMessages((prev) => [
               ...prev,
               {
-                id: Date.now(),
+                id: messageId,
                 ...msgData,
                 isOwn: false,
                 time: new Date().toLocaleTimeString([], {
@@ -240,6 +267,15 @@ export default function AppRoutes({ SOCKET_URL }) {
                 }),
               },
             ]);
+
+            // Confirm delivery back to sender
+            if (msgData.id) {
+              newSocket.emit("message_delivered", {
+                roomId: joinRoomId,
+                messageId: msgData.id,
+                senderId: data.senderId,
+              });
+            }
           }
         });
       });
