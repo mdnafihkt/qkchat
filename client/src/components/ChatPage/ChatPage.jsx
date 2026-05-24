@@ -290,11 +290,21 @@ export default function ChatPage({
             {msg.type === "file" ? (
               <div className="file-attachment">
                 {msg.fileType && msg.fileType.startsWith("image/") ? (
-                  <img
-                    src={msg.fileData}
-                    alt={msg.fileName}
-                    className="attached-image"
-                  />
+                  <div className="image-container">
+                    <img
+                      src={msg.fileData}
+                      alt={msg.fileName}
+                      className="attached-image"
+                    />
+                    <a
+                      href={msg.fileData}
+                      download={msg.fileName}
+                      className="image-download-btn"
+                      title="Download Image"
+                    >
+                      <Download size={18} />
+                    </a>
+                  </div>
                 ) : (
                   <div className="attached-file">
                     <File size={24} className="file-icon" />
