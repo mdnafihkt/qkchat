@@ -31,8 +31,6 @@ io.on('connection', (socket) => {
     // We do NOT store anything on the server.
     socket.on('send_message', (data, callback) => {
         const { roomId, message } = data;
-        const messageSize = JSON.stringify(message).length;
-        console.log(`Relaying message in room: ${roomId} (size: ${(messageSize / 1024 / 1024).toFixed(2)}MB)`);
         socket.to(roomId).emit('receive_message', {
             senderId: socket.id,
             ...message
@@ -45,7 +43,6 @@ io.on('connection', (socket) => {
     // Relay delivery confirmation back to the sender
     socket.on('message_delivered', (data) => {
         const { roomId, messageId, senderId } = data;
-        console.log(`Message delivered in room ${roomId}: ${messageId} to sender ${senderId}`);
         io.to(senderId).emit('message_delivered', { messageId });
     });
 

@@ -61,7 +61,6 @@ export default function AppRoutes({ SOCKET_URL }) {
         newSocket.on("connect", () => {
           setIsConnected(true);
           newSocket.emit("join_room", reconnectRoomId);
-          console.log("Auto-reconnected to room:", reconnectRoomId);
           resolve();
         });
 
@@ -74,7 +73,7 @@ export default function AppRoutes({ SOCKET_URL }) {
         });
 
         newSocket.on("user_joined", (id) => {
-          console.log("Another user joined");
+          // No log in production
         });
 
         newSocket.on("message_delivered", ({ messageId }) => {
@@ -113,10 +112,6 @@ export default function AppRoutes({ SOCKET_URL }) {
             let msgData;
             try {
               msgData = JSON.parse(decryptedText);
-              console.log("Decrypted message type:", msgData.type);
-              if (msgData.type === "file") {
-                console.log("Received file:", msgData.fileName, msgData.fileType);
-              }
             } catch (err) {
               msgData = { type: "text", text: decryptedText };
             }
@@ -202,8 +197,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           setIsConnected(false);
         });
 
-        newSocket.on("user_joined", (id) => {
-          console.log("Another user joined");
+        newSocket.on("user_joined", (id) => {          
         });
 
         newSocket.on("message_delivered", ({ messageId }) => {
@@ -244,10 +238,6 @@ export default function AppRoutes({ SOCKET_URL }) {
             let msgData;
             try {
               msgData = JSON.parse(decryptedText);
-              console.log("Decrypted message type:", msgData.type);
-              if (msgData.type === "file") {
-                console.log("Received file:", msgData.fileName, msgData.fileType);
-              }
             } catch (err) {
               // Fallback for older plaintext messages
               msgData = { type: "text", text: decryptedText };
