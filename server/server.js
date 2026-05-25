@@ -46,6 +46,24 @@ io.on('connection', (socket) => {
         io.to(senderId).emit('message_delivered', { messageId });
     });
 
+    // Relay sync request to other clients in the room
+    socket.on('sync_request', (data) => {
+        const { roomId, timestamp } = data;
+        socket.to(roomId).emit('sync_request', {
+            senderId: socket.id,
+            timestamp
+        });
+    });
+
+    // Relay sync response directly to the specific recipient
+    socket.on('sync_response', (data) => {
+        const { roomId, recipientId, messages } = data;
+        io.to(recipientId).emit('sync_response', {
+            senderId: socket.id,
+            messages
+        });
+    });
+
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
     });

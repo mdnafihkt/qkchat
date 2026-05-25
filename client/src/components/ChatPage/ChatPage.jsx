@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage } from "../../utils/crypto";
+import { saveMessage, updateMessageStatus } from "../../utils/ledger";
 import QRCode from "react-qr-code";
 import "./ChatPage.css";
 
@@ -74,6 +75,7 @@ export default function ChatPage({
     if (!newMessage.trim() || !socket || !cryptoKey) return;
 
     const messageId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+    const timestamp = Date.now();
 
     // Add to local state immediately as 'sending'
     setMessages((prev) => [
@@ -84,11 +86,12 @@ export default function ChatPage({
         text: newMessage,
         isOwn: true,
         status: "sending",
-        time: new Date().toLocaleTimeString([], {
+        time: new Date(timestamp).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
         }),
+        timestamp
       },
     ]);
     
@@ -100,17 +103,29 @@ export default function ChatPage({
       const payload = JSON.stringify({ id: messageId, type: "text", text: textToSend });
       const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
+      // Save to local ledger
+      await saveMessage(roomId, {
+        messageId,
+        timestamp,
+        isOwn: true,
+        status: "sending",
+        ciphertext: encryptedPayload.ciphertext,
+        iv: encryptedPayload.iv
+      });
+
       // Send the encrypted blob to the relay server with server acknowledgment callback
       socket.emit("send_message", {
         roomId,
         message: encryptedPayload,
-      }, () => {
+      }, async () => {
         // Server acknowledged -> update local status to 'sent'
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === messageId ? { ...msg, status: "sent" } : msg
           )
         );
+        // Also update in ledger
+        await updateMessageStatus(messageId, "sent");
       });
     } catch (err) {
       console.error("Failed to send message", err);
@@ -153,6 +168,7 @@ export default function ChatPage({
     }
 
     const messageId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+    const timestamp = Date.now();
 
     // Immediately add to messages list as 'sending' with empty/loading data
     setMessages((prev) => [
@@ -166,11 +182,12 @@ export default function ChatPage({
         fileIcon: getFileIcon(file.type),
         isOwn: true,
         status: "sending",
-        time: new Date().toLocaleTimeString([], {
+        time: new Date(timestamp).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
         }),
+        timestamp
       },
     ]);
 
@@ -196,13 +213,25 @@ export default function ChatPage({
         });
         const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
-        socket.emit("send_message", { roomId, message: encryptedPayload }, () => {
+        // Save to local ledger
+        await saveMessage(roomId, {
+          messageId,
+          timestamp,
+          isOwn: true,
+          status: "sending",
+          ciphertext: encryptedPayload.ciphertext,
+          iv: encryptedPayload.iv
+        });
+
+        socket.emit("send_message", { roomId, message: encryptedPayload }, async () => {
           // Server acknowledged -> update local status to 'sent'
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === messageId ? { ...msg, status: "sent" } : msg
             )
           );
+          // Also update in ledger
+          await updateMessageStatus(messageId, "sent");
         });
       } catch (err) {
         console.error("Failed to send file", err);
