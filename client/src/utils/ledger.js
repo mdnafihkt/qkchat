@@ -133,3 +133,76 @@ export async function clearRoomMessages(roomId) {
     };
   });
 }
+
+// Clear all expired messages across all rooms based on a retention period
+export async function clearExpiredMessages(retentionPeriodMs) {
+  if (!retentionPeriodMs) return;
+  const db = await initDB();
+  const cutoff = Date.now() - retentionPeriodMs;
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["messages"], "readwrite");
+    const store = transaction.objectStore("messages");
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        if (cursor.value.timestamp < cutoff) {
+          cursor.delete();
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+
+    request.onerror = (event) => {
+      reject(event.target.error);
+    };
+  });
+}
+
+// Clear messages for all rooms EXCEPT the currently active room
+export async function clearAllRoomsExcept(activeRoomId) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["messages"], "readwrite");
+    const store = transaction.objectStore("messages");
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        if (cursor.value.roomId !== activeRoomId) {
+          cursor.delete();
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+
+    request.onerror = (event) => {
+      reject(event.target.error);
+    };
+  });
+}
+
+// Clear all messages in the entire database
+export async function clearAllMessages() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["messages"], "readwrite");
+    const store = transaction.objectStore("messages");
+    const request = store.clear();
+
+    request.onsuccess = () => {
+      resolve();
+    };
+
+    request.onerror = (event) => {
+      reject(event.target.error);
+    };
+  });
+}
+

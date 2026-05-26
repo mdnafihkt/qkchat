@@ -50,6 +50,8 @@ export default function ChatPage({
   setMessages,
   isConnected,
   handleLeave,
+  retentionPeriod,
+  onUpdateRetentionPeriod,
 }) {
   const [newMessage, setNewMessage] = useState("");
   const [showQRCode, setShowQRCode] = useState(false);
@@ -269,6 +271,19 @@ export default function ChatPage({
           <p>E2E Encrypted</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div className="retention-selector-wrapper" title="Message Retention Period">
+            <Clock size={14} className="retention-icon" />
+            <select
+              value={retentionPeriod}
+              onChange={(e) => onUpdateRetentionPeriod(parseInt(e.target.value))}
+              className="retention-select"
+            >
+              <option value={3600000}>1 Hour</option>
+              <option value={43200000}>12 Hours</option>
+              <option value={86400000}>24 Hours</option>
+              <option value={604800000}>7 Days</option>
+            </select>
+          </div>
           <span
             className={`status-badge ${!isConnected ? "disconnected" : ""}`}
           >

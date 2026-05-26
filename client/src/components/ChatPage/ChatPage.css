@@ -439,3 +439,42 @@ body,
 .copyable-field:hover svg {
     color: var(--text-main) !important;
 }
+
+/* Retention Selector Styles */
+.retention-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    color: var(--text-muted);
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.retention-selector-wrapper:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.retention-icon {
+    color: var(--primary);
+}
+
+.retention-select {
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    padding-right: 0.25rem;
+}
+
+.retention-select option {
+    background: #1e1e24; /* Fallback for select dropdown panel */
+    color: white;
+}
+

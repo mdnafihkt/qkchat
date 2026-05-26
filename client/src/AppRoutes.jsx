@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import { deriveKey, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
-import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages } from "./utils/ledger";
+import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages, clearAllRoomsExcept, clearAllMessages } from "./utils/ledger";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
 import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
@@ -20,11 +20,31 @@ export default function AppRoutes({ SOCKET_URL }) {
   const [sessionRecoveryNeeded, setSessionRecoveryNeeded] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const [retentionPeriod, setRetentionPeriod] = useState(() => {
+    return parseInt(localStorage.getItem("qkchat_retention_period") || "86400000"); // 24h default
+  });
+
   // Keep a ref to the latest messages state to avoid stale closure issues in socket handlers
   const messagesRef = useRef([]);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Periodically prune expired messages
+  useEffect(() => {
+    const prune = async () => {
+      if (retentionPeriod && roomId) {
+        await clearExpiredMessages(retentionPeriod);
+        const cutoff = Date.now() - retentionPeriod;
+        setMessages((prev) => prev.filter((m) => m.timestamp >= cutoff));
+      }
+    };
+
+    prune();
+    const interval = setInterval(prune, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [retentionPeriod, roomId]);
+
 
   // Check for session recovery on mount
   useEffect(() => {
@@ -335,6 +355,12 @@ export default function AppRoutes({ SOCKET_URL }) {
     }
 
     try {
+      const oldRoomId = localStorage.getItem("room_id");
+      if (oldRoomId && oldRoomId !== joinRoomId) {
+        await clearAllRoomsExcept(joinRoomId);
+        sessionStorage.removeItem("chat_key");
+      }
+
       const key = await deriveKey(joinPassword, joinRoomId);
       setCryptoKey(key);
 
@@ -347,6 +373,7 @@ export default function AppRoutes({ SOCKET_URL }) {
         console.warn("Unable to persist crypto key for session recovery:", err);
       }
 
+      await clearExpiredMessages(retentionPeriod);
       await loadMessagesFromLedger(joinRoomId, key);
 
       const newSocket = io(SOCKET_URL);
@@ -372,11 +399,18 @@ export default function AppRoutes({ SOCKET_URL }) {
     }
   };
 
+  const handleUpdateRetentionPeriod = async (newPeriod) => {
+    setRetentionPeriod(newPeriod);
+    localStorage.setItem("qkchat_retention_period", newPeriod.toString());
+    await clearExpiredMessages(newPeriod);
+    const cutoff = Date.now() - newPeriod;
+    setMessages((prev) => prev.filter((m) => m.timestamp >= cutoff));
+  };
+
   const handleLeave = () => {
     if (socket) {
       socket.disconnect();
     }
-    const currentRoomId = roomId;
     setSocket(null);
     setCryptoKey(null);
     setMessages([]);
@@ -386,9 +420,19 @@ export default function AppRoutes({ SOCKET_URL }) {
     sessionStorage.removeItem("chat_key");
     setSessionRecoveryNeeded(false);
 
-    if (currentRoomId) {
-      clearRoomMessages(currentRoomId).catch(err => {
-        console.error("Failed to clear room messages from ledger:", err);
+    // Completely wipe all room data and messages from IndexedDB for maximum security
+    clearAllMessages().catch(err => {
+      console.error("Failed to clear messages from ledger:", err);
+    });
+
+    // Clear caches
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        for (let name of names) {
+          caches.delete(name);
+        }
+      }).catch(err => {
+        console.error("Failed to clear cache storage:", err);
       });
     }
   };
@@ -429,6 +473,8 @@ export default function AppRoutes({ SOCKET_URL }) {
               setMessages={setMessages}
               isConnected={isConnected}
               handleLeave={handleLeave}
+              retentionPeriod={retentionPeriod}
+              onUpdateRetentionPeriod={handleUpdateRetentionPeriod}
             />
           }
         />
