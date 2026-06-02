@@ -12,6 +12,8 @@ import {
   CheckCheck,
   Check,
   Clock,
+  Menu,
+  ChevronDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage } from "../../utils/crypto";
@@ -55,6 +57,8 @@ export default function ChatPage({
 }) {
   const [newMessage, setNewMessage] = useState("");
   const [showQRCode, setShowQRCode] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -259,31 +263,29 @@ export default function ChatPage({
   return (
     <div className="glass-panel chat-container">
       <div className="chat-header">
-        <div>
-          <h2
-            style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem" }}
-            onClick={() => setShowQRCode(!showQRCode)}
-            title="Click to show QR code"
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <button
+            onClick={() => setShowSidebar(!showSidebar)}
+            className="icon-btn header-action-btn hamburger-btn"
+            style={{
+              background: "transparent",
+              color: "var(--text-muted)",
+              padding: "0.25rem",
+              width: "auto",
+              height: "auto",
+              borderRadius: "0",
+            }}
+            title="Toggle Menu"
           >
-            Session: {roomId}
-            <QrCode size={16} />
-          </h2>
-          <p>E2E Encrypted</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <div className="retention-selector-wrapper" title="Message Retention Period">
-            <Clock size={14} className="retention-icon" />
-            <select
-              value={retentionPeriod}
-              onChange={(e) => onUpdateRetentionPeriod(parseInt(e.target.value))}
-              className="retention-select"
-            >
-              <option value={3600000}>1 Hour</option>
-              <option value={43200000}>12 Hours</option>
-              <option value={86400000}>24 Hours</option>
-              <option value={604800000}>7 Days</option>
-            </select>
+            <Menu size={20} />
+          </button>
+          <div>
+            <h2>Session: {roomId}</h2>
+            <p>E2E Encrypted</p>
           </div>
+        </div>
+        
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <span
             className={`status-badge ${!isConnected ? "disconnected" : ""}`}
           >
@@ -291,16 +293,255 @@ export default function ChatPage({
           </span>
           <button
             onClick={handleLeave}
-            className="icon-btn"
+            className="icon-btn header-action-btn"
             style={{
               background: "transparent",
               color: "var(--text-muted)",
               padding: "0.25rem",
+              width: "auto",
+              height: "auto",
+              borderRadius: "0",
             }}
             title="Leave Room"
           >
             <LogOut size={20} />
           </button>
+        </div>
+      </div>
+
+      <div className="chat-layout-wrapper">
+        {showSidebar && (
+          <div className="sidebar-overlay" onClick={() => setShowSidebar(false)} />
+        )}
+
+        <aside className={`chat-sidebar ${showSidebar ? "open" : ""}`}>
+          <div className="sidebar-header">
+            <h3>Room Settings</h3>
+            <button
+              className="sidebar-close-btn"
+              onClick={() => setShowSidebar(false)}
+              title="Close Settings"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="sidebar-body">
+            <div className="settings-section">
+              <h4>Message Retention</h4>
+              <p className="settings-desc">Choose how long messages remain stored in your local browser before being permanently pruned.</p>
+              
+              <div className="custom-dropdown-container">
+                <button
+                  type="button"
+                  className="dropdown-trigger"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  title="Select Retention Period"
+                >
+                  <Clock size={16} className="dropdown-trigger-icon" />
+                  <span className="dropdown-selected-label">
+                    {
+                      [
+                        { value: 3600000, label: "1 Hour" },
+                        { value: 43200000, label: "12 Hours" },
+                        { value: 86400000, label: "24 Hours" },
+                        { value: 604800000, label: "7 Days" }
+                      ].find(opt => opt.value === retentionPeriod)?.label || "Select Period"
+                    }
+                  </span>
+                  <ChevronDown size={16} className={`dropdown-arrow ${dropdownOpen ? "open" : ""}`} />
+                </button>
+
+                {dropdownOpen && (
+                  <div className="dropdown-menu">
+                    {[
+                      { value: 3600000, label: "1 Hour", desc: "For temporary discussions" },
+                      { value: 43200000, label: "12 Hours", desc: "Keep history for half a day" },
+                      { value: 86400000, label: "24 Hours", desc: "Standard daily rotation" },
+                      { value: 604800000, label: "7 Days", desc: "Longer term recovery limit" }
+                    ].map((opt) => (
+                      <div
+                        key={opt.value}
+                        className={`dropdown-item ${retentionPeriod === opt.value ? "active" : ""}`}
+                        onClick={() => {
+                          onUpdateRetentionPeriod(opt.value);
+                          setDropdownOpen(false);
+                        }}
+                      >
+                        <div className="dropdown-item-details">
+                          <span className="dropdown-item-title">{opt.label}</span>
+                          <span className="dropdown-item-desc">{opt.desc}</span>
+                        </div>
+                        {retentionPeriod === opt.value && (
+                          <Check size={16} className="dropdown-item-check" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <h4>Session Sharing</h4>
+              <p className="settings-desc">Invite peers to this secure room using the room ID or a QR code.</p>
+              
+              <div className="session-share-actions">
+                <div
+                  className="share-field copyable-field"
+                  onClick={() => copyToClipboard(roomId)}
+                  title="Click to copy Chat Room ID"
+                >
+                  <span className="share-text">{roomId}</span>
+                  {isCopied ? (
+                    <CheckCheck size={16} className="text-primary" />
+                  ) : (
+                    <Copy size={16} />
+                  )}
+                </div>
+
+                <button
+                  className="btn-sidebar-qr"
+                  onClick={() => setShowQRCode(true)}
+                  title="Open QR Code Share Overlay"
+                >
+                  <QrCode size={16} />
+                  <span>Show QR Code</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div className="chat-main-content">
+          <div className="messages-area">
+            {messages.length === 0 && (
+              <div
+                style={{
+                  textAlign: "center",
+                  color: "var(--text-muted)",
+                  margin: "auto",
+                }}
+              >
+                <Lock size={32} style={{ margin: "0 auto 1rem", opacity: 0.5 }} />
+                <p>Session initialized.</p>
+                <p style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
+                  Messages are not stored and will be permanently lost when you
+                  leave.
+                </p>
+              </div>
+            )}
+
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`message-bubble ${msg.isOwn ? "own" : "peer"}`}
+              >
+                {msg.type === "file" ? (
+                  <div className="file-attachment">
+                    {msg.fileType && msg.fileType.startsWith("image/") ? (
+                      <div className="image-container">
+                        {msg.fileData ? (
+                          <>
+                            <img
+                              src={msg.fileData}
+                              alt={msg.fileName}
+                              className="attached-image"
+                            />
+                            <a
+                              href={msg.fileData}
+                              download={msg.fileName}
+                              className="image-download-btn"
+                              title="Download Image"
+                            >
+                              <Download size={18} />
+                            </a>
+                          </>
+                        ) : (
+                          <div className="image-loading-placeholder">
+                            <Clock size={20} className="spinner-icon" />
+                            <span>Encrypting {msg.fileName}...</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="attached-file">
+                        <File size={24} className="file-icon" />
+                        <div className="file-info">
+                          <span className="file-name" title={msg.fileName}>
+                            {msg.fileName}
+                          </span>
+                          {msg.fileType && (
+                            <span className="file-type">{msg.fileType}</span>
+                          )}
+                        </div>
+                        {msg.fileData ? (
+                          <a
+                            href={msg.fileData}
+                            download={msg.fileName}
+                            className="download-btn"
+                            title="Download"
+                          >
+                            <Download size={18} />
+                          </a>
+                        ) : (
+                          <div className="file-loading-placeholder">
+                            <Clock size={16} className="spinner-icon" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text">{msg.text}</div>
+                )}
+                <div className="message-meta">
+                  <span className="time">{msg.time}</span>
+                  {msg.isOwn && (
+                    <span className={`status-indicator ${msg.status || "sent"}`} title={msg.status || "sent"}>
+                      {msg.status === "sending" && <Clock size={12} />}
+                      {(msg.status === "sent" || !msg.status) && <Check size={12} />}
+                      {msg.status === "delivered" && <CheckCheck size={12} />}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <form onSubmit={handleSend} className="input-area">
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,image/*"
+              title="Attach document or image files (PDF, Word, PowerPoint, Excel, etc.)"
+            />
+            <button
+              type="button"
+              className="icon-btn attachment-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach file: PDF, Word, PowerPoint, Excel, Images, etc."
+            >
+              <Paperclip size={20} />
+            </button>
+            <input
+              type="text"
+              placeholder="Type an encrypted message..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              className="icon-btn"
+              disabled={!newMessage.trim()}
+            >
+              <SendHorizontal size={20} />
+            </button>
+          </form>
         </div>
       </div>
 
@@ -340,135 +581,6 @@ export default function ChatPage({
           </div>
         </div>
       )}
-
-      <div className="messages-area">
-        {messages.length === 0 && (
-          <div
-            style={{
-              textAlign: "center",
-              color: "var(--text-muted)",
-              margin: "auto",
-            }}
-          >
-            <Lock size={32} style={{ margin: "0 auto 1rem", opacity: 0.5 }} />
-            <p>Session initialized.</p>
-            <p style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
-              Messages are not stored and will be permanently lost when you
-              leave.
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`message-bubble ${msg.isOwn ? "own" : "peer"}`}
-          >
-            {msg.type === "file" ? (
-              <div className="file-attachment">
-                {msg.fileType && msg.fileType.startsWith("image/") ? (
-                  <div className="image-container">
-                    {msg.fileData ? (
-                      <>
-                        <img
-                          src={msg.fileData}
-                          alt={msg.fileName}
-                          className="attached-image"
-                        />
-                        <a
-                          href={msg.fileData}
-                          download={msg.fileName}
-                          className="image-download-btn"
-                          title="Download Image"
-                        >
-                          <Download size={18} />
-                        </a>
-                      </>
-                    ) : (
-                      <div className="image-loading-placeholder">
-                        <Clock size={20} className="spinner-icon" />
-                        <span>Encrypting {msg.fileName}...</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="attached-file">
-                    <File size={24} className="file-icon" />
-                    <div className="file-info">
-                      <span className="file-name" title={msg.fileName}>
-                        {msg.fileName}
-                      </span>
-                      {msg.fileType && (
-                        <span className="file-type">{msg.fileType}</span>
-                      )}
-                    </div>
-                    {msg.fileData ? (
-                      <a
-                        href={msg.fileData}
-                        download={msg.fileName}
-                        className="download-btn"
-                        title="Download"
-                      >
-                        <Download size={18} />
-                      </a>
-                    ) : (
-                      <div className="file-loading-placeholder">
-                        <Clock size={16} className="spinner-icon" />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text">{msg.text}</div>
-            )}
-            <div className="message-meta">
-              <span className="time">{msg.time}</span>
-              {msg.isOwn && (
-                <span className={`status-indicator ${msg.status || "sent"}`} title={msg.status || "sent"}>
-                  {msg.status === "sending" && <Clock size={12} />}
-                  {(msg.status === "sent" || !msg.status) && <Check size={12} />}
-                  {msg.status === "delivered" && <CheckCheck size={12} />}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <form onSubmit={handleSend} className="input-area">
-        <input
-          type="file"
-          ref={fileInputRef}
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,image/*"
-          title="Attach document or image files (PDF, Word, PowerPoint, Excel, etc.)"
-        />
-        <button
-          type="button"
-          className="icon-btn attachment-btn"
-          onClick={() => fileInputRef.current?.click()}
-          title="Attach file: PDF, Word, PowerPoint, Excel, Images, etc."
-        >
-          <Paperclip size={20} />
-        </button>
-        <input
-          type="text"
-          placeholder="Type an encrypted message..."
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          autoComplete="off"
-        />
-        <button
-          type="submit"
-          className="icon-btn"
-          disabled={!newMessage.trim()}
-        >
-          <SendHorizontal size={20} />
-        </button>
-      </form>
     </div>
   );
 }
