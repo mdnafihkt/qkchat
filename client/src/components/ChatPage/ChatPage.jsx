@@ -76,8 +76,15 @@ export default function ChatPage({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(e);
+    }
+  };
+
   const handleSend = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!newMessage.trim() || !socket || !cryptoKey) return;
 
     const messageId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
@@ -527,12 +534,12 @@ export default function ChatPage({
             >
               <Paperclip size={20} />
             </button>
-            <input
-              type="text"
+            <textarea
               placeholder="Type an encrypted message..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              autoComplete="off"
+              onKeyDown={handleKeyDown}
+              rows={1}
             />
             <button
               type="submit"
