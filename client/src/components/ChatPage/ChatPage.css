@@ -781,4 +781,59 @@ body,
     }
 }
 
+/* File Transfer Progress Styles */
+.file-transfer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    z-index: 10;
+}
+
+.transfer-status-text {
+    font-size: 0.85rem;
+    color: var(--text-main);
+    font-weight: 500;
+}
+
+.transfer-percentage-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.transfer-progress-bar-container {
+    width: 80%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.transfer-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    border-radius: 10px;
+    transition: width 0.2s ease-out;
+}
+
+.transfer-progress-section {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.attached-file .transfer-progress-bar-container {
+    width: 100%;
+    margin-top: 4px;
+}
+
 

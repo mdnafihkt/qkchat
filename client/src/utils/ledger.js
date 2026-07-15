@@ -109,6 +109,34 @@ export async function updateMessageStatus(messageId, status) {
   });
 }
 
+// Update message fileBlob and status
+export async function updateMessageFileBlob(messageId, fileBlob, status) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["messages"], "readwrite");
+    const store = transaction.objectStore("messages");
+    const index = store.index("messageId");
+    const getRequest = index.get(messageId);
+
+    getRequest.onsuccess = () => {
+      const record = getRequest.result;
+      if (record) {
+        if (fileBlob) record.fileBlob = fileBlob;
+        if (status) record.status = status;
+        const putRequest = store.put(record);
+        putRequest.onsuccess = () => resolve(true);
+        putRequest.onerror = (event) => reject(event.target.error);
+      } else {
+        resolve(false);
+      }
+    };
+
+    getRequest.onerror = (event) => {
+      reject(event.target.error);
+    };
+  });
+}
+
 // Clear all messages for a room (e.g. when leaving chat)
 export async function clearRoomMessages(roomId) {
   const db = await initDB();

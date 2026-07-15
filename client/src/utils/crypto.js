@@ -117,3 +117,27 @@ export async function importKeyFromJWK(jwkString) {
         ["encrypt", "decrypt"]
     );
 }
+
+// Encrypts an ArrayBuffer/TypedArray directly, returning raw encrypted ArrayBuffer and base64 encoded iv
+export async function encryptBinary(key, binaryData) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encryptedBuf = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        binaryData
+    );
+    const ivArr = Array.from(iv);
+    const ivBase64 = arrayToBase64(ivArr);
+    return { encryptedData: encryptedBuf, iv: ivBase64 };
+}
+
+// Decrypts an encrypted ArrayBuffer using the base64 encoded iv, returning decrypted ArrayBuffer
+export async function decryptBinary(key, encryptedData, ivBase64) {
+    const iv = base64ToArray(ivBase64);
+    const decryptedBuf = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encryptedData
+    );
+    return decryptedBuf;
+}

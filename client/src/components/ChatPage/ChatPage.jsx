@@ -16,8 +16,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { encryptMessage } from "../../utils/crypto";
-import { saveMessage, updateMessageStatus } from "../../utils/ledger";
+import { encryptMessage, encryptBinary, decryptBinary } from "../../utils/crypto";
+import { saveMessage, updateMessageStatus, updateMessageFileBlob } from "../../utils/ledger";
 import QRCode from "react-qr-code";
 import "./ChatPage.css";
 
@@ -62,6 +62,8 @@ export default function ChatPage({
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [transfers, setTransfers] = useState({});
+  const activeTransfersRef = useRef({});
   const navigate = useNavigate();
 
   // If a user navigates directly to /chat without a socket connection, boot them back.
@@ -75,6 +77,100 @@ export default function ChatPage({
     // Scroll to bottom on new message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReceiveFileChunk = async (chunk) => {
+      const { transferId, chunkIndex, iv, encryptedData } = chunk;
+
+      // Find the metadata message in the current list of messages
+      const msg = messages.find((m) => m.transferId === transferId);
+      
+      if (!activeTransfersRef.current[transferId]) {
+        activeTransfersRef.current[transferId] = {
+          chunks: [],
+          receivedCount: 0,
+          totalChunks: msg ? msg.totalChunks : null,
+          fileName: msg ? msg.fileName : "",
+          fileType: msg ? msg.fileType : "",
+          fileSize: msg ? msg.fileSize : 0,
+          messageId: msg ? msg.id : ""
+        };
+      }
+
+      const transfer = activeTransfersRef.current[transferId];
+
+      // Update totalChunks if we just received the message meta
+      if (!transfer.totalChunks && msg) {
+        transfer.totalChunks = msg.totalChunks;
+        transfer.fileName = msg.fileName;
+        transfer.fileType = msg.fileType;
+        transfer.fileSize = msg.fileSize;
+        transfer.messageId = msg.id;
+      }
+
+      // Avoid double-processing the same chunk
+      if (transfer.chunks[chunkIndex]) return;
+
+      try {
+        const decryptedData = await decryptBinary(cryptoKey, encryptedData, iv);
+        transfer.chunks[chunkIndex] = decryptedData;
+        transfer.receivedCount += 1;
+
+        const total = transfer.totalChunks;
+        if (total) {
+          const progress = Math.round((transfer.receivedCount / total) * 100);
+          setTransfers((prev) => ({
+            ...prev,
+            [transferId]: { progress, status: "Receiving" }
+          }));
+
+          if (transfer.receivedCount === total) {
+            // Reconstruct the file Blob
+            const fileBlob = new Blob(transfer.chunks, { type: transfer.fileType });
+            const fileUrl = URL.createObjectURL(fileBlob);
+
+            // Reconstruct the message in local state
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.transferId === transferId ? { ...m, fileData: fileUrl, status: "delivered" } : m
+              )
+            );
+
+            // Save the file blob and update status in IndexedDB
+            if (transfer.messageId) {
+              await updateMessageFileBlob(transfer.messageId, fileBlob, "delivered");
+              
+              // Emit delivery confirmation
+              if (msg && msg.senderId) {
+                socket.emit("message_delivered", {
+                  roomId,
+                  messageId: transfer.messageId,
+                  senderId: msg.senderId
+                });
+              }
+            }
+
+            // Cleanup transfer buffer
+            delete activeTransfersRef.current[transferId];
+            setTransfers((prev) => {
+              const next = { ...prev };
+              delete next[transferId];
+              return next;
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to process incoming chunk:", err);
+      }
+    };
+
+    socket.on("receive_file_chunk", handleReceiveFileChunk);
+    return () => {
+      socket.off("receive_file_chunk", handleReceiveFileChunk);
+    };
+  }, [socket, cryptoKey, messages, roomId]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && e.shiftKey) {
@@ -157,7 +253,7 @@ export default function ChatPage({
     return "file";
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file || !socket || !cryptoKey) return;
 
@@ -180,8 +276,14 @@ export default function ChatPage({
       );
     }
 
-    const messageId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+    const CHUNK_SIZE = 512 * 1024; // 512 KB
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const transferId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
+    const messageId = "msg-" + transferId;
     const timestamp = Date.now();
+
+    // Create an Object URL of the local file so the sender sees it immediately
+    const localUrl = URL.createObjectURL(file);
 
     // Immediately add to messages list as 'sending' with empty/loading data
     setMessages((prev) => [
@@ -189,9 +291,10 @@ export default function ChatPage({
       {
         id: messageId,
         type: "file",
+        transferId,
         fileName: file.name,
         fileType: file.type,
-        fileData: "",
+        fileData: localUrl,
         fileIcon: getFileIcon(file.type),
         isOwn: true,
         status: "sending",
@@ -200,57 +303,110 @@ export default function ChatPage({
           minute: "2-digit",
           hour12: true,
         }),
-        timestamp
+        timestamp,
+        totalChunks
       },
     ]);
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64Data = event.target.result;
+    // Initialize progress tracking state
+    setTransfers((prev) => ({
+      ...prev,
+      [transferId]: { progress: 0, status: "Encrypting" }
+    }));
 
-      // Update local state with loaded fileData
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId ? { ...msg, fileData: base64Data } : msg
-        )
-      );
+    try {
+      // 1. Encrypt file metadata
+      const payload = JSON.stringify({
+        id: messageId,
+        type: "file",
+        transferId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        totalChunks,
+        fileIcon: getFileIcon(file.type)
+      });
+      const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
-      try {
-        const payload = JSON.stringify({
-          id: messageId,
-          type: "file",
-          fileName: file.name,
-          fileType: file.type,
-          fileData: base64Data,
-          fileIcon: getFileIcon(file.type),
+      // Save encrypted metadata message to local ledger
+      await saveMessage(roomId, {
+        messageId,
+        timestamp,
+        isOwn: true,
+        status: "sending",
+        ciphertext: encryptedPayload.ciphertext,
+        iv: encryptedPayload.iv
+      });
+
+      // Also save the file blob locally in IndexedDB so we can load it after page refresh!
+      await updateMessageFileBlob(messageId, file, "sending");
+
+      // 2. Send metadata message over socket.io
+      socket.emit("send_message", { roomId, message: encryptedPayload }, async () => {
+        // Metadata message sent!
+        // Now start streaming chunks.
+        setTransfers((prev) => ({
+          ...prev,
+          [transferId]: { progress: 0, status: "Uploading" }
+        }));
+
+        const readChunk = (blob) => {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve(ev.target.result);
+            reader.readAsArrayBuffer(blob);
+          });
+        };
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const blobSlice = file.slice(start, end);
+          
+          const arrayBuffer = await readChunk(blobSlice);
+          const { encryptedData, iv } = await encryptBinary(cryptoKey, arrayBuffer);
+
+          // Stream chunk binary
+          socket.emit("send_file_chunk", {
+            roomId,
+            chunk: {
+              transferId,
+              chunkIndex,
+              iv,
+              encryptedData
+            }
+          });
+
+          // Update progress
+          const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+          setTransfers((prev) => ({
+            ...prev,
+            [transferId]: { progress, status: "Uploading" }
+          }));
+        }
+
+        // Complete upload
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, status: "sent" } : msg
+          )
+        );
+        await updateMessageStatus(messageId, "sent");
+        await updateMessageFileBlob(messageId, null, "sent"); // Keep fileBlob, just update status
+        setTransfers((prev) => {
+          const next = { ...prev };
+          delete next[transferId];
+          return next;
         });
-        const encryptedPayload = await encryptMessage(cryptoKey, payload);
+      });
+    } catch (err) {
+      console.error("Failed to upload file in chunks:", err);
+      setTransfers((prev) => ({
+        ...prev,
+        [transferId]: { progress: 0, status: "Failed" }
+      }));
+    }
 
-        // Save to local ledger
-        await saveMessage(roomId, {
-          messageId,
-          timestamp,
-          isOwn: true,
-          status: "sending",
-          ciphertext: encryptedPayload.ciphertext,
-          iv: encryptedPayload.iv
-        });
-
-        socket.emit("send_message", { roomId, message: encryptedPayload }, async () => {
-          // Server acknowledged -> update local status to 'sent'
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === messageId ? { ...msg, status: "sent" } : msg
-            )
-          );
-          // Also update in ledger
-          await updateMessageStatus(messageId, "sent");
-        });
-      } catch (err) {
-        console.error("Failed to send file", err);
-      }
-    };
-    reader.readAsDataURL(file);
     e.target.value = null;
   };
 
@@ -445,60 +601,96 @@ export default function ChatPage({
                 className={`message-bubble ${msg.isOwn ? "own" : "peer"}`}
               >
                 {msg.type === "file" ? (
-                  <div className="file-attachment">
-                    {msg.fileType && msg.fileType.startsWith("image/") ? (
-                      <div className="image-container">
-                        {msg.fileData ? (
-                          <>
-                            <img
-                              src={msg.fileData}
-                              alt={msg.fileName}
-                              className="attached-image"
-                            />
-                            <a
-                              href={msg.fileData}
-                              download={msg.fileName}
-                              className="image-download-btn"
-                              title="Download Image"
-                            >
-                              <Download size={18} />
-                            </a>
-                          </>
+                  (() => {
+                    const transfer = transfers[msg.transferId];
+                    return (
+                      <div className="file-attachment">
+                        {msg.fileType && msg.fileType.startsWith("image/") ? (
+                          <div className="image-container">
+                            {msg.fileData ? (
+                              <div style={{ position: "relative" }}>
+                                <img
+                                  src={msg.fileData}
+                                  alt={msg.fileName}
+                                  className="attached-image"
+                                />
+                                {transfer && (
+                                  <div className="file-transfer-overlay">
+                                    <div className="transfer-status-text">{transfer.status}...</div>
+                                    <div className="transfer-progress-bar-container">
+                                      <div className="transfer-progress-bar" style={{ width: `${transfer.progress}%` }}></div>
+                                    </div>
+                                    <div className="transfer-percentage-text">{transfer.progress}%</div>
+                                  </div>
+                                )}
+                                {!transfer && (
+                                  <a
+                                    href={msg.fileData}
+                                    download={msg.fileName}
+                                    className="image-download-btn"
+                                    title="Download Image"
+                                  >
+                                    <Download size={18} />
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="image-loading-placeholder">
+                                <Clock size={20} className="spinner-icon" />
+                                {transfer ? (
+                                  <>
+                                    <span>{transfer.status} {transfer.progress}%...</span>
+                                    <div className="transfer-progress-bar-container" style={{ width: "80%", marginTop: "8px" }}>
+                                      <div className="transfer-progress-bar" style={{ width: `${transfer.progress}%` }}></div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span>Encrypting {msg.fileName}...</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          <div className="image-loading-placeholder">
-                            <Clock size={20} className="spinner-icon" />
-                            <span>Encrypting {msg.fileName}...</span>
+                          <div className="attached-file">
+                            <File size={24} className="file-icon" />
+                            <div className="file-info">
+                              <span className="file-name" title={msg.fileName}>
+                                {msg.fileName}
+                              </span>
+                              {transfer ? (
+                                <div className="transfer-progress-section" style={{ marginTop: "4px" }}>
+                                  <span className="transfer-status-text" style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>
+                                    {transfer.status} ({transfer.progress}%)
+                                  </span>
+                                  <div className="transfer-progress-bar-container" style={{ marginTop: "4px" }}>
+                                    <div className="transfer-progress-bar" style={{ width: `${transfer.progress}%` }}></div>
+                                  </div>
+                                </div>
+                              ) : msg.fileType ? (
+                                <span className="file-type">{msg.fileType}</span>
+                              ) : null}
+                            </div>
+                            {msg.fileData && !transfer ? (
+                              <a
+                                href={msg.fileData}
+                                download={msg.fileName}
+                                className="download-btn"
+                                title="Download"
+                              >
+                                <Download size={18} />
+                              </a>
+                            ) : (
+                              !transfer && (
+                                <div className="file-loading-placeholder">
+                                  <Clock size={16} className="spinner-icon" />
+                                </div>
+                              )
+                            )}
                           </div>
                         )}
                       </div>
-                    ) : (
-                      <div className="attached-file">
-                        <File size={24} className="file-icon" />
-                        <div className="file-info">
-                          <span className="file-name" title={msg.fileName}>
-                            {msg.fileName}
-                          </span>
-                          {msg.fileType && (
-                            <span className="file-type">{msg.fileType}</span>
-                          )}
-                        </div>
-                        {msg.fileData ? (
-                          <a
-                            href={msg.fileData}
-                            download={msg.fileName}
-                            className="download-btn"
-                            title="Download"
-                          >
-                            <Download size={18} />
-                          </a>
-                        ) : (
-                          <div className="file-loading-placeholder">
-                            <Clock size={16} className="spinner-icon" />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })()
                 ) : (
                   <div className="text">{msg.text}</div>
                 )}
@@ -535,7 +727,7 @@ export default function ChatPage({
               <Paperclip size={20} />
             </button>
             <textarea
-              placeholder="Type an encrypted message..."
+              placeholder="Message"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}

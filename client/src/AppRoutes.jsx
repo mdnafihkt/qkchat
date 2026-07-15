@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import { deriveKey, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
-import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages, clearAllRoomsExcept, clearAllMessages } from "./utils/ledger";
+import { saveMessage, getRoomMessages, updateMessageStatus, updateMessageFileBlob, clearRoomMessages, clearExpiredMessages, clearAllRoomsExcept, clearAllMessages } from "./utils/ledger";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
 import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
@@ -86,6 +86,9 @@ export default function AppRoutes({ SOCKET_URL }) {
             msgData = JSON.parse(decryptedText);
           } catch (err) {
             msgData = { type: "text", text: decryptedText };
+          }
+          if (record.fileBlob) {
+            msgData.fileData = URL.createObjectURL(record.fileBlob);
           }
           decryptedMessages.push({
             id: record.messageId,
@@ -208,6 +211,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           newRemoteMessages.push({
             id: item.id,
             ...msgData,
+            senderId: item.wasOwn ? null : data.senderId,
             isOwn: !item.wasOwn,
             status: "sent",
             time: new Date(item.timestamp).toLocaleTimeString([], {
@@ -296,6 +300,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           {
             id: messageId,
             ...msgData,
+            senderId: data.senderId,
             isOwn: false,
             time: new Date(timestamp).toLocaleTimeString([], {
               hour: "2-digit",
@@ -306,7 +311,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           },
         ]);
 
-        if (msgData.id) {
+        if (msgData.id && msgData.type !== "file") {
           newSocket.emit("message_delivered", {
             roomId: activeRoomId,
             messageId: msgData.id,

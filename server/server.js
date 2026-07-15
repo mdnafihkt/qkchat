@@ -40,6 +40,14 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('send_file_chunk', (data, callback) => {
+        const { roomId, chunk } = data;
+        socket.to(roomId).emit('receive_file_chunk', chunk);
+        if (typeof callback === 'function') {
+            callback();
+        }
+    });
+
     // Relay delivery confirmation back to the sender
     socket.on('message_delivered', (data) => {
         const { roomId, messageId, senderId } = data;
