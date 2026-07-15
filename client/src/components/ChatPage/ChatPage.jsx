@@ -367,14 +367,18 @@ export default function ChatPage({
           const { encryptedData, iv } = await encryptBinary(cryptoKey, arrayBuffer);
 
           // Stream chunk binary
-          socket.emit("send_file_chunk", {
-            roomId,
-            chunk: {
-              transferId,
-              chunkIndex,
-              iv,
-              encryptedData
-            }
+          await new Promise((resolve) => {
+            socket.emit("send_file_chunk", {
+              roomId,
+              chunk: {
+                transferId,
+                chunkIndex,
+                iv,
+                encryptedData
+              }
+            }, () => {
+              resolve();
+            });
           });
 
           // Update progress
