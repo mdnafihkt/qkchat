@@ -443,7 +443,14 @@ export default function ChatPage({
             <Menu size={20} />
           </button>
           <div>
-            <h2>Session: {roomId}</h2>
+            <h2
+              style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem" }}
+              onClick={() => setShowQRCode(!showQRCode)}
+              title="Click to show QR code"
+            >
+              Session: {roomId}
+              <QrCode size={16} />
+            </h2>
             <p>E2E Encrypted</p>
           </div>
         </div>
