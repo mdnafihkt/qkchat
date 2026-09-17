@@ -1,8 +1,0 @@
-{
-  "appId": "com.qkchat.app",
-  "appName": "QkChat",
-  "webDir": "dist",
-  "server": {
-    "androidScheme": "https"
-  }
-}
