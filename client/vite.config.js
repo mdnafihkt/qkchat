@@ -18,19 +18,19 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'qkchat-circle.png',
+            src: '/icons/icon-192.webp',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/webp'
           },
           {
-            src: 'qkchat-circle.png',
+            src: '/icons/icon-512.webp',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/webp'
           },
           {
-            src: 'qkchat-circle.png',
+            src: '/icons/icon-512.webp',
             sizes: '512x512',
-            type: 'image/png',
+            type: 'image/webp',
             purpose: 'any maskable'
           }
         ]

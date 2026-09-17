@@ -24,7 +24,7 @@
 
 .logo {
     height: 84px;
-    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.6));
+    
 }
 
 @media(max-width: 486px) {
