@@ -14,12 +14,6 @@ import {
   Clock,
   Menu,
   ChevronDown,
-  Plus,
-  MessageSquare,
-  Unlock,
-  Shield,
-  LogIn,
-  PlusCircle,
   Home,
   Tag,
 } from "lucide-react";
@@ -75,14 +69,6 @@ export default function ChatPage({
     setRoomNameInput(currentRoom?.roomName || "");
   }, [activeRoomId, currentRoom?.roomName]);
 
-  // Add Room Modal State
-  const [showAddRoomModal, setShowAddRoomModal] = useState(false);
-  const [addRoomTab, setAddRoomTab] = useState("start"); // "start" or "join"
-  const [modalRoomId, setModalRoomId] = useState("");
-  const [modalPassword, setModalPassword] = useState("");
-  const [modalError, setModalError] = useState("");
-  const [isSubmittingModal, setIsSubmittingModal] = useState(false);
-
   // Unlock State
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
@@ -112,35 +98,6 @@ export default function ChatPage({
     // Scroll to bottom on new message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Generate random room ID when opening "start" tab in Add Room modal
-  const handleOpenAddRoomModal = () => {
-    const generateSegment = () => Math.random().toString(36).substring(2, 10);
-    setModalRoomId(generateSegment() + "-" + generateSegment());
-    setModalPassword("");
-    setModalError("");
-    setAddRoomTab("start");
-    setShowAddRoomModal(true);
-  };
-
-  const handleAddRoomSubmit = async (e) => {
-    e.preventDefault();
-    setModalError("");
-    if (!modalRoomId.trim() || !modalPassword.trim()) {
-      setModalError("Chat ID and Password are required.");
-      return;
-    }
-    setIsSubmittingModal(true);
-    try {
-      await onJoinNewRoom(modalRoomId.trim(), modalPassword.trim());
-      setShowAddRoomModal(false);
-      setModalPassword("");
-    } catch (err) {
-      setModalError("Failed to connect or create room.");
-    } finally {
-      setIsSubmittingModal(false);
-    }
-  };
 
   const handleUnlockSubmit = async (e) => {
     e.preventDefault();
@@ -496,14 +453,6 @@ export default function ChatPage({
       <div className="chat-header">
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <button
-            onClick={() => navigate("/")}
-            className="btn-header-home"
-            title="Back to Home Hub"
-          >
-            <Home size={18} />
-            <span>Home</span>
-          </button>
-          <button
             onClick={() => setShowSidebar(!showSidebar)}
             className="icon-btn header-action-btn hamburger-btn"
             style={{
@@ -526,40 +475,33 @@ export default function ChatPage({
             >
               {currentRoom?.roomName || (activeRoomId.length > 16 ? activeRoomId.substring(0, 14) + "..." : activeRoomId)}
               <QrCode size={16} />
-            </h2>
-            <p>{currentRoom?.roomName ? `ID: ${activeRoomId}` : "E2E Encrypted"}</p>
+            </h2>            
+            <div className="connection-status">
+                {isConnected ? "Connected" : "Reconnecting..."}
+                <span className={`connection-status-dot ${!isConnected ? "offline" : "online"}`}></span>     
+            </div>
+                       
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           {currentRoom && (
             <>
-              <span className={`status-badge ${!isConnected ? "disconnected" : ""}`}>
-                {isConnected ? "Connected" : "Reconnecting..."}
-              </span>
               <button
-                onClick={() => setShowQRCode(!showQRCode)}
-                className="icon-btn header-action-btn"
-                style={{
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  padding: "0.25rem",
-                }}
-                title="Show Room QR Code"
+                onClick={() => navigate("/")}
+                className="btn-header-home"
+                title="Back to Home Hub"
               >
-                <QrCode size={20} />
+                <Home size={20} />
+                <span>Home</span>
               </button>
               <button
                 onClick={() => onLeaveRoom(activeRoomId)}
-                className="icon-btn header-action-btn"
-                style={{
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  padding: "0.25rem",
-                }}
+                className="btn-header-home"                
                 title="Leave Current Room"
               >
                 <LogOut size={20} />
+                <span>Leave Room</span>
               </button>
             </>
           )}
@@ -590,13 +532,6 @@ export default function ChatPage({
             <div className="settings-section">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
                 <h4>Your Rooms</h4>
-                <button
-                  className="btn-sidebar-add"
-                  onClick={handleOpenAddRoomModal}
-                  title="Add or Join Room"
-                >
-                  <Plus size={14} /> New Room
-                </button>
               </div>
 
               <div className="sidebar-room-list">
@@ -613,7 +548,7 @@ export default function ChatPage({
                       <span className={`status-dot ${r.isConnected ? "online" : "offline"}`} />
                       <div className="room-item-info">
                         <span className="room-item-title">
-                          {r.roomId}
+                          {r.roomName || r.roomId}
                           {r.isLocked && <Lock size={12} className="lock-inline-icon" />}
                         </span>
                         <span className="room-item-subtitle">
@@ -973,7 +908,6 @@ export default function ChatPage({
         <div className="qr-code-overlay">
           <div className="qr-code-modal">
             <div className="qr-code-header">
-              <h3>Share Room: {activeRoomId}</h3>
               <button
                 onClick={() => setShowQRCode(false)}
                 className="close-btn"
@@ -986,7 +920,7 @@ export default function ChatPage({
               <QRCode
                 value={activeRoomId}
                 size={200}
-                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                style={{ height: "auto", maxWidth: "100%", width: "50%" }}
                 viewBox={`0 0 256 256`}
               />
               <p className="qr-code-text">Scan to join session</p>
@@ -1002,95 +936,6 @@ export default function ChatPage({
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* In-App Add/Join Room Modal */}
-      {showAddRoomModal && (
-        <div className="qr-code-overlay">
-          <div className="add-room-modal glass-panel">
-            <div className="modal-header">
-              <h3>Add Room</h3>
-              <button
-                onClick={() => setShowAddRoomModal(false)}
-                className="close-btn"
-                title="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-tab-selector">
-              <button
-                className={`tab-btn ${addRoomTab === "start" ? "active" : ""}`}
-                onClick={() => {
-                  const generateSegment = () => Math.random().toString(36).substring(2, 10);
-                  setModalRoomId(generateSegment() + "-" + generateSegment());
-                  setAddRoomTab("start");
-                }}
-              >
-                <PlusCircle size={16} /> Create New Room
-              </button>
-              <button
-                className={`tab-btn ${addRoomTab === "join" ? "active" : ""}`}
-                onClick={() => {
-                  setModalRoomId("");
-                  setAddRoomTab("join");
-                }}
-              >
-                <LogIn size={16} /> Join Existing Room
-              </button>
-            </div>
-
-            <form onSubmit={handleAddRoomSubmit} className="modal-form">
-              <div className="form-group">
-                <label>Chat Room ID</label>
-                <div className="input-wrapper">
-                  <Shield size={18} className="input-icon" />
-                  <input
-                    type="text"
-                    placeholder="Enter or generated Room ID"
-                    value={modalRoomId}
-                    onChange={(e) => setModalRoomId(e.target.value)}
-                    readOnly={addRoomTab === "start"}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Password (Decryption Key)</label>
-                <div className="input-wrapper">
-                  <Lock size={18} className="input-icon" />
-                  <input
-                    type="password"
-                    placeholder="Enter room password"
-                    value={modalPassword}
-                    onChange={(e) => setModalPassword(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              {modalError && <div className="error-msg">{modalError}</div>}
-
-              <div className="modal-actions">
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={isSubmittingModal || !modalPassword.trim() || !modalRoomId.trim()}
-                >
-                  {isSubmittingModal ? "Connecting..." : addRoomTab === "start" ? "Create & Join Room" : "Join Room"}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowAddRoomModal(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

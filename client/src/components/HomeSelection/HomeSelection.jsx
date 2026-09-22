@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlusCircle, LogIn, MessageSquare, Lock, X, ChevronRight } from "lucide-react";
+import { PlusCircle, LogIn, MessageSquare, Lock, X, ChevronRight, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./HomeSelection.css";
 
@@ -81,7 +81,7 @@ export default function HomeSelection({
                     }}
                     title="Leave & remove room"
                   >
-                    <X size={16} />
+                    <LogOut size={20} />
                   </button>
                 </div>
 
