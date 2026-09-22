@@ -445,8 +445,6 @@ export default function ChatPage({
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const roomList = Object.values(rooms);
-
   return (
     <div className="glass-panel chat-container">
       {/* Header */}
@@ -517,7 +515,7 @@ export default function ChatPage({
         {/* Sidebar */}
         <aside className={`chat-sidebar ${showSidebar ? "open" : ""}`}>
           <div className="sidebar-header">
-            <h3>Active Rooms ({roomList.length})</h3>
+            <h3>Room Settings</h3>
             <button
               className="sidebar-close-btn"
               onClick={() => setShowSidebar(false)}
@@ -528,54 +526,6 @@ export default function ChatPage({
           </div>
 
           <div className="sidebar-body">
-            {/* Rooms List Section */}
-            <div className="settings-section">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <h4>Your Rooms</h4>
-              </div>
-
-              <div className="sidebar-room-list">
-                {roomList.map((r) => (
-                  <div
-                    key={r.roomId}
-                    className={`sidebar-room-item ${r.roomId === activeRoomId ? "active" : ""}`}
-                    onClick={() => {
-                      onSwitchRoom(r.roomId);
-                      setShowSidebar(false);
-                    }}
-                  >
-                    <div className="room-item-left">
-                      <span className={`status-dot ${r.isConnected ? "online" : "offline"}`} />
-                      <div className="room-item-info">
-                        <span className="room-item-title">
-                          {r.roomName || r.roomId}
-                          {r.isLocked && <Lock size={12} className="lock-inline-icon" />}
-                        </span>
-                        <span className="room-item-subtitle">
-                          {r.isLocked ? "Password required" : `${r.messages.length} messages`}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="room-item-right">
-                      {r.unreadCount > 0 && (
-                        <span className="unread-badge">{r.unreadCount}</span>
-                      )}
-                      <button
-                        className="room-close-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onLeaveRoom(r.roomId);
-                        }}
-                        title="Leave this room"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Room Settings Section */}
             {currentRoom && !isLocked && (
               <>
