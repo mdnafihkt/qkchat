@@ -10,6 +10,7 @@ export default function JoinChat({ onJoin }) {
   const [joinPassword, setJoinPassword] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
 
   const handleManualJoin = async (e) => {
     e.preventDefault();
@@ -18,11 +19,13 @@ export default function JoinChat({ onJoin }) {
       setError("Chat ID and Password are required.");
       return;
     }
+    setIsJoining(true);
     try {
       await onJoin(joinId, joinPassword);
       navigate("/chat");
     } catch (err) {
       setError("Failed to connect to chat room");
+      setIsJoining(false);
     }
   };
 
@@ -98,9 +101,14 @@ export default function JoinChat({ onJoin }) {
             <button
               type="submit"
               className="btn-primary"
-              style={{ marginTop: "1rem", width: "100%" }}
+              disabled={isJoining}
+              style={{
+                marginTop: "1rem",
+                width: "100%",
+                opacity: isJoining ? 0.5 : 1,
+              }}
             >
-              Join Secure Session
+              {isJoining ? "Please wait..." : "Join Secure Session"}
             </button>
           </form>
         </>

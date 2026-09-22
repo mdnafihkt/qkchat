@@ -11,6 +11,7 @@ export default function StartChat({ onJoin }) {
     password: "",
   });
   const [isCopied, setIsCopied] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => {
     // Generate relatively strong ID on mount
@@ -27,11 +28,13 @@ export default function StartChat({ onJoin }) {
 
   const handleStart = async () => {
     if (newChatDetails.password.trim()) {
+      setIsJoining(true);
       try {
         await onJoin(newChatDetails.id, newChatDetails.password);
         navigate("/chat");
       } catch (err) {
         console.error("Failed to connect", err);
+        setIsJoining(false);
       }
     }
   };
@@ -118,15 +121,15 @@ export default function StartChat({ onJoin }) {
 
           <button
             className="btn-primary"
-            disabled={!newChatDetails.password.trim()}
+            disabled={!newChatDetails.password.trim() || isJoining}
             onClick={handleStart}
             style={{
               marginTop: "1.5rem",
               width: "100%",
-              opacity: newChatDetails.password.trim() ? 1 : 0.5,
+              opacity: newChatDetails.password.trim() && !isJoining ? 1 : 0.5,
             }}
           >
-            Enter Room
+            {isJoining ? "Entering info..." : "Enter Room"}
           </button>
         </div>
       </div>
