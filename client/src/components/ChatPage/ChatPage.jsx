@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock,
   SendHorizontal,
@@ -508,133 +509,190 @@ export default function ChatPage({
 
       {/* Main Layout */}
       <div className="chat-layout-wrapper">
-        {showSidebar && (
-          <div className="sidebar-overlay" onClick={() => setShowSidebar(false)} />
-        )}
+        <AnimatePresence>
+          {showSidebar && (
+            <>
+              {/* Overlay Backdrop */}
+              <motion.div
+                className="sidebar-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setShowSidebar(false)}
+              />
 
-        {/* Sidebar */}
-        <aside className={`chat-sidebar ${showSidebar ? "open" : ""}`}>
-          <div className="sidebar-header">
-            <h3>Room Settings</h3>
-            <button
-              className="sidebar-close-btn"
-              onClick={() => setShowSidebar(false)}
-              title="Close Drawer"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          <div className="sidebar-body">
-            {/* Room Settings Section */}
-            {currentRoom && !isLocked && (
-              <>
-                <div className="settings-section">
-                  <h4>Room Display Name</h4>
-                  <p className="settings-desc">Set a local custom name for this room (stored zero-knowledge on your device).</p>
-                  <div className="input-wrapper">
-                    <Tag size={16} className="input-icon" />
-                    <input
-                      type="text"
-                      placeholder="e.g. Project Delta"
-                      value={roomNameInput}
-                      onChange={(e) => {
-                        setRoomNameInput(e.target.value);
-                        if (onSetRoomName) {
-                          onSetRoomName(activeRoomId, e.target.value);
-                        }
-                      }}
-                    />
-                  </div>
+              {/* Sidebar Panel */}
+              <motion.aside
+                className="chat-sidebar"
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "tween", duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
+              >
+                <div className="sidebar-header">
+                  <h3>Room Settings</h3>
+                  <button
+                    className="sidebar-close-btn"
+                    onClick={() => setShowSidebar(false)}
+                    title="Close Drawer"
+                  >
+                    <X size={20} />
+                  </button>
                 </div>
 
-                <div className="settings-section">
-                  <h4>Message Retention</h4>
-                  <p className="settings-desc">Choose how long messages remain stored in your local browser before being permanently pruned.</p>
-                  
-                  <div className="custom-dropdown-container">
-                    <button
-                      type="button"
-                      className="dropdown-trigger"
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
-                      title="Select Retention Period"
-                    >
-                      <Clock size={16} className="dropdown-trigger-icon" />
-                      <span className="dropdown-selected-label">
-                        {
-                          [
-                            { value: 3600000, label: "1 Hour" },
-                            { value: 43200000, label: "12 Hours" },
-                            { value: 86400000, label: "24 Hours" },
-                            { value: 604800000, label: "7 Days" }
-                          ].find(opt => opt.value === retentionPeriod)?.label || "Select Period"
-                        }
-                      </span>
-                      <ChevronDown size={16} className={`dropdown-arrow ${dropdownOpen ? "open" : ""}`} />
-                    </button>
-
-                    {dropdownOpen && (
-                      <div className="dropdown-menu">
-                        {[
-                          { value: 3600000, label: "1 Hour", desc: "For temporary discussions" },
-                          { value: 43200000, label: "12 Hours", desc: "Keep history for half a day" },
-                          { value: 86400000, label: "24 Hours", desc: "Standard daily rotation" },
-                          { value: 604800000, label: "7 Days", desc: "Longer term recovery limit" }
-                        ].map((opt) => (
-                          <div
-                            key={opt.value}
-                            className={`dropdown-item ${retentionPeriod === opt.value ? "active" : ""}`}
-                            onClick={() => {
-                              onUpdateRetentionPeriod(activeRoomId, opt.value);
-                              setDropdownOpen(false);
+                <motion.div
+                  className="sidebar-body"
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    hidden: { opacity: 0 },
+                    visible: {
+                      opacity: 1,
+                      transition: {
+                        staggerChildren: 0.08,
+                        delayChildren: 0.1,
+                      },
+                    },
+                  }}
+                >
+                  {currentRoom && !isLocked && (
+                    <>
+                      <motion.div
+                        className="settings-section"
+                        variants={{
+                          hidden: { opacity: 0, x: -15 },
+                          visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+                        }}
+                      >
+                        <h4>Room Display Name</h4>
+                        <p className="settings-desc">Set a local custom name for this room (stored zero-knowledge on your device).</p>
+                        <div className="input-wrapper">
+                          <Tag size={16} className="input-icon" />
+                          <input
+                            type="text"
+                            placeholder="e.g. Project Delta"
+                            value={roomNameInput}
+                            onChange={(e) => {
+                              setRoomNameInput(e.target.value);
+                              if (onSetRoomName) {
+                                onSetRoomName(activeRoomId, e.target.value);
+                              }
                             }}
+                          />
+                        </div>
+                      </motion.div>
+
+                      <motion.div
+                        className="settings-section"
+                        variants={{
+                          hidden: { opacity: 0, x: -15 },
+                          visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+                        }}
+                      >
+                        <h4>Message Retention</h4>
+                        <p className="settings-desc">Choose how long messages remain stored in your local browser before being permanently pruned.</p>
+                        
+                        <div className="custom-dropdown-container">
+                          <button
+                            type="button"
+                            className="dropdown-trigger"
+                            onClick={() => setDropdownOpen(!dropdownOpen)}
+                            title="Select Retention Period"
                           >
-                            <div className="dropdown-item-details">
-                              <span className="dropdown-item-title">{opt.label}</span>
-                              <span className="dropdown-item-desc">{opt.desc}</span>
-                            </div>
-                            {retentionPeriod === opt.value && (
-                              <Check size={16} className="dropdown-item-check" />
+                            <Clock size={16} className="dropdown-trigger-icon" />
+                            <span className="dropdown-selected-label">
+                              {
+                                [
+                                  { value: 3600000, label: "1 Hour" },
+                                  { value: 43200000, label: "12 Hours" },
+                                  { value: 86400000, label: "24 Hours" },
+                                  { value: 604800000, label: "7 Days" }
+                                ].find(opt => opt.value === retentionPeriod)?.label || "Select Period"
+                              }
+                            </span>
+                            <ChevronDown size={16} className={`dropdown-arrow ${dropdownOpen ? "open" : ""}`} />
+                          </button>
+
+                          <AnimatePresence>
+                            {dropdownOpen && (
+                              <motion.div
+                                className="dropdown-menu"
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.15 }}
+                              >
+                                {[
+                                  { value: 3600000, label: "1 Hour", desc: "For temporary discussions" },
+                                  { value: 43200000, label: "12 Hours", desc: "Keep history for half a day" },
+                                  { value: 86400000, label: "24 Hours", desc: "Standard daily rotation" },
+                                  { value: 604800000, label: "7 Days", desc: "Longer term recovery limit" }
+                                ].map((opt) => (
+                                  <div
+                                    key={opt.value}
+                                    className={`dropdown-item ${retentionPeriod === opt.value ? "active" : ""}`}
+                                    onClick={() => {
+                                      onUpdateRetentionPeriod(activeRoomId, opt.value);
+                                      setDropdownOpen(false);
+                                    }}
+                                  >
+                                    <div className="dropdown-item-details">
+                                      <span className="dropdown-item-title">{opt.label}</span>
+                                      <span className="dropdown-item-desc">{opt.desc}</span>
+                                    </div>
+                                    {retentionPeriod === opt.value && (
+                                      <Check size={16} className="dropdown-item-check" />
+                                    )}
+                                  </div>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </motion.div>
+
+                      <motion.div
+                        className="settings-section"
+                        variants={{
+                          hidden: { opacity: 0, x: -15 },
+                          visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+                        }}
+                      >
+                        <h4>Session Sharing</h4>
+                        <p className="settings-desc">Invite peers to this secure room using the room ID or a QR code.</p>
+                        
+                        <div className="session-share-actions">
+                          <div
+                            className="share-field copyable-field"
+                            onClick={() => copyToClipboard(activeRoomId)}
+                            title="Click to copy Chat Room ID"
+                          >
+                            <span className="share-text">{activeRoomId}</span>
+                            {isCopied ? (
+                              <CheckCheck size={16} className="text-primary" />
+                            ) : (
+                              <Copy size={16} />
                             )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                <div className="settings-section">
-                  <h4>Session Sharing</h4>
-                  <p className="settings-desc">Invite peers to this secure room using the room ID or a QR code.</p>
-                  
-                  <div className="session-share-actions">
-                    <div
-                      className="share-field copyable-field"
-                      onClick={() => copyToClipboard(activeRoomId)}
-                      title="Click to copy Chat Room ID"
-                    >
-                      <span className="share-text">{activeRoomId}</span>
-                      {isCopied ? (
-                        <CheckCheck size={16} className="text-primary" />
-                      ) : (
-                        <Copy size={16} />
-                      )}
-                    </div>
-
-                    <button
-                      className="btn-sidebar-qr"
-                      onClick={() => setShowQRCode(true)}
-                      title="Open QR Code Share Overlay"
-                    >
-                      <QrCode size={16} />
-                      <span>Show QR Code</span>
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </aside>
+                          <button
+                            className="btn-sidebar-qr"
+                            onClick={() => setShowQRCode(true)}
+                            title="Open QR Code Share Overlay"
+                          >
+                            <QrCode size={16} />
+                            <span>Show QR Code</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </motion.div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Chat Main Section */}
         <div className="chat-main-content">

@@ -337,7 +337,7 @@
     border: none;
     color: var(--text-muted);
     padding: 0.25rem;
-    border-radius: 50%;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
