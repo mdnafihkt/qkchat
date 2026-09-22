@@ -78,13 +78,16 @@ io.on('connection', (socket) => {
   socket.on('join_room', (roomId) => {
     if (!isValidRoomId(roomId)) return;
 
-    // Clean up previous rooms if any
-    const rooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
-    rooms.forEach((r) => socket.leave(r));
-
     socket.join(roomId);
     console.log(`User ${socket.id} joined room: ${roomId}`);
-    socket.to(roomId).emit('user_joined', socket.id);
+    socket.to(roomId).emit('user_joined', { roomId, senderId: socket.id });
+  });
+
+  // User leaves a specific room
+  socket.on('leave_room', (roomId) => {
+    if (!isValidRoomId(roomId)) return;
+    socket.leave(roomId);
+    console.log(`User ${socket.id} left room: ${roomId}`);
   });
 
   // Relay encrypted messages directly to the room
@@ -95,6 +98,7 @@ io.on('connection', (socket) => {
 
     socket.to(roomId).emit('receive_message', {
       senderId: socket.id,
+      roomId,
       ...message,
     });
 
@@ -108,7 +112,10 @@ io.on('connection', (socket) => {
     const { roomId, chunk } = data;
     if (!isValidRoomId(roomId) || !chunk) return;
 
-    socket.to(roomId).emit('receive_file_chunk', chunk);
+    socket.to(roomId).emit('receive_file_chunk', {
+      roomId,
+      ...chunk,
+    });
 
     if (typeof callback === 'function') {
       callback();
@@ -121,7 +128,7 @@ io.on('connection', (socket) => {
     const { roomId, messageId, senderId } = data;
     if (!isValidRoomId(roomId) || typeof senderId !== 'string') return;
 
-    io.to(senderId).emit('message_delivered', { messageId });
+    io.to(senderId).emit('message_delivered', { messageId, roomId });
   });
 
   // Relay sync request to other clients in the room
@@ -132,6 +139,7 @@ io.on('connection', (socket) => {
 
     socket.to(roomId).emit('sync_request', {
       senderId: socket.id,
+      roomId,
       timestamp,
     });
   });
@@ -144,6 +152,7 @@ io.on('connection', (socket) => {
 
     io.to(recipientId).emit('sync_response', {
       senderId: socket.id,
+      roomId,
       messages,
     });
   });
