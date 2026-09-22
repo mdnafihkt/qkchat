@@ -20,6 +20,7 @@ import {
   Shield,
   LogIn,
   PlusCircle,
+  Home,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage, encryptBinary, decryptBinary } from "../../utils/crypto";
@@ -488,6 +489,14 @@ export default function ChatPage({
       <div className="chat-header">
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <button
+            onClick={() => navigate("/")}
+            className="btn-header-home"
+            title="Back to Home Hub"
+          >
+            <Home size={18} />
+            <span>Home</span>
+          </button>
+          <button
             onClick={() => setShowSidebar(!showSidebar)}
             className="icon-btn header-action-btn hamburger-btn"
             style={{
@@ -502,29 +511,16 @@ export default function ChatPage({
           >
             <Menu size={20} />
           </button>
-
-          {/* Quick Room Switcher Tabs for Desktop */}
-          <div className="header-rooms-bar">
-            {roomList.map((r) => (
-              <button
-                key={r.roomId}
-                className={`header-room-chip ${r.roomId === activeRoomId ? "active" : ""}`}
-                onClick={() => onSwitchRoom(r.roomId)}
-                title={`Switch to room ${r.roomId}`}
-              >
-                <span className={`status-dot ${r.isConnected ? "online" : "offline"}`} />
-                {r.isLocked && <Lock size={12} className="chip-lock-icon" />}
-                <span className="chip-id">{r.roomId.length > 12 ? r.roomId.substring(0, 10) + "..." : r.roomId}</span>
-                {r.unreadCount > 0 && <span className="unread-badge">{r.unreadCount}</span>}
-              </button>
-            ))}
-            <button
-              className="header-add-room-btn"
-              onClick={handleOpenAddRoomModal}
-              title="Join or Create Another Room"
+          <div>
+            <h2
+              style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+              onClick={() => setShowQRCode(!showQRCode)}
+              title="Click to show QR code"
             >
-              <Plus size={16} />
-            </button>
+              Session: {activeRoomId.length > 16 ? activeRoomId.substring(0, 14) + "..." : activeRoomId}
+              <QrCode size={16} />
+            </h2>
+            <p>E2E Encrypted</p>
           </div>
         </div>
 

@@ -598,7 +598,20 @@ export default function AppRoutes({ SOCKET_URL }) {
   return (
     <div className="app-container">
       <Routes>
-        <Route path="/" element={<HomeSelection />} />
+        <Route
+          path="/"
+          element={
+            <HomeSelection
+              rooms={rooms}
+              onSelectRoom={(rId) => {
+                handleSwitchRoom(rId);
+                navigate("/chat");
+              }}
+              onLeaveRoom={handleLeaveRoom}
+              onUnlockRoom={handleUnlockRoom}
+            />
+          }
+        />
         <Route
           path="/start"
           element={
