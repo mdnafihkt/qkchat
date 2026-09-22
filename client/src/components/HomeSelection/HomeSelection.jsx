@@ -66,7 +66,10 @@ export default function HomeSelection({
                 <div className="room-card-header">
                   <div className="room-title-area">
                     <span className={`status-dot ${room.isConnected ? "online" : "offline"}`} />
-                    <span className="room-card-title">{room.roomId}</span>
+                    <div className="title-text-stack">
+                      <span className="room-card-title">{room.roomName || room.roomId}</span>
+                      {room.roomName && <span className="room-card-id-sub">{room.roomId}</span>}
+                    </div>
                     {room.isLocked && <Lock size={14} className="lock-icon" />}
                   </div>
 

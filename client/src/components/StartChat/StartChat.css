@@ -175,3 +175,44 @@
         margin-top: 0.5rem;
     }
 }
+
+/* Retention Configuration Chips in StartChat */
+.retention-options-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+@media (max-width: 480px) {
+    .retention-options-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.retention-chip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.4rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.retention-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+}
+
+.retention-chip.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}

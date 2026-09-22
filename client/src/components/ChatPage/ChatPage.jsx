@@ -21,6 +21,7 @@ import {
   LogIn,
   PlusCircle,
   Home,
+  Tag,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage, encryptBinary, decryptBinary } from "../../utils/crypto";
@@ -62,12 +63,18 @@ export default function ChatPage({
   onLeaveRoom,
   onUnlockRoom,
   onUpdateRetentionPeriod,
+  onSetRoomName,
 }) {
   const [newMessage, setNewMessage] = useState("");
   const [showQRCode, setShowQRCode] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   
+  const [roomNameInput, setRoomNameInput] = useState(currentRoom?.roomName || "");
+  useEffect(() => {
+    setRoomNameInput(currentRoom?.roomName || "");
+  }, [activeRoomId, currentRoom?.roomName]);
+
   // Add Room Modal State
   const [showAddRoomModal, setShowAddRoomModal] = useState(false);
   const [addRoomTab, setAddRoomTab] = useState("start"); // "start" or "join"
@@ -517,10 +524,10 @@ export default function ChatPage({
               onClick={() => setShowQRCode(!showQRCode)}
               title="Click to show QR code"
             >
-              Session: {activeRoomId.length > 16 ? activeRoomId.substring(0, 14) + "..." : activeRoomId}
+              {currentRoom?.roomName || (activeRoomId.length > 16 ? activeRoomId.substring(0, 14) + "..." : activeRoomId)}
               <QrCode size={16} />
             </h2>
-            <p>E2E Encrypted</p>
+            <p>{currentRoom?.roomName ? `ID: ${activeRoomId}` : "E2E Encrypted"}</p>
           </div>
         </div>
 
@@ -637,6 +644,25 @@ export default function ChatPage({
             {/* Room Settings Section */}
             {currentRoom && !isLocked && (
               <>
+                <div className="settings-section">
+                  <h4>Room Display Name</h4>
+                  <p className="settings-desc">Set a local custom name for this room (stored zero-knowledge on your device).</p>
+                  <div className="input-wrapper">
+                    <Tag size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      placeholder="e.g. Project Delta"
+                      value={roomNameInput}
+                      onChange={(e) => {
+                        setRoomNameInput(e.target.value);
+                        if (onSetRoomName) {
+                          onSetRoomName(activeRoomId, e.target.value);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
                 <div className="settings-section">
                   <h4>Message Retention</h4>
                   <p className="settings-desc">Choose how long messages remain stored in your local browser before being permanently pruned.</p>

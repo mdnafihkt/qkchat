@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Shield, Lock, Copy, Info, Check } from "lucide-react";
+import { Shield, Lock, Copy, Info, Check, Clock, Tag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import QRCode from "react-qr-code";
 import "./StartChat.css";
@@ -8,16 +8,17 @@ export default function StartChat({ onJoin }) {
   const navigate = useNavigate();
   const [newChatDetails, setNewChatDetails] = useState({
     id: "",
+    name: "",
     password: "",
+    retentionPeriod: 86400000, // 24 Hours default
   });
   const [isCopied, setIsCopied] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => {
-    // Generate relatively strong ID on mount
     const generateSegment = () => Math.random().toString(36).substring(2, 10);
     const randomId = generateSegment() + "-" + generateSegment();
-    setNewChatDetails({ id: randomId, password: "" });
+    setNewChatDetails((prev) => ({ ...prev, id: randomId }));
   }, []);
 
   const copyToClipboard = (text) => {
@@ -30,7 +31,12 @@ export default function StartChat({ onJoin }) {
     if (newChatDetails.password.trim()) {
       setIsJoining(true);
       try {
-        await onJoin(newChatDetails.id, newChatDetails.password);
+        await onJoin(
+          newChatDetails.id,
+          newChatDetails.password,
+          newChatDetails.name,
+          newChatDetails.retentionPeriod
+        );
         navigate("/chat");
       } catch (err) {
         console.error("Failed to connect", err);
@@ -47,20 +53,13 @@ export default function StartChat({ onJoin }) {
         &larr; Back
       </button>
       <div className="panel-header">
-        <img src="/qkchat.png" className="text-primary start-chat-logo" />        
-        <h2>Your Secure Room</h2>
+        <img src="/qkchat.png" className="text-primary start-chat-logo" alt="Logo" />        
+        <h2>Configure Secure Room</h2>
       </div>
 
       <div className="start-chat-content">
         <div className="qr-container">
-          <div
-            className="qr-box"
-            style={{
-              background: "white",
-              padding: "16px",
-              borderRadius: "12px",
-            }}
-          >
+          <div className="qr-box">
             {qrPayload ? (
               <QRCode
                 className="qr-code"
@@ -70,14 +69,15 @@ export default function StartChat({ onJoin }) {
                 level="Q"
               />
             ) : (
-              <div style={{ width: 180, height: 180 }} />
+              <div style={{ width: 160, height: 160 }} />
             )}
           </div>
-          <p className="qr-hint">Have your peer scan this to get the Chat ID</p>
+          <p className="qr-hint">Have peer scan to join</p>
         </div>
 
         <div className="room-details-container">
           <div className="credentials-box">
+            {/* Chat ID */}
             <div className="credential-row">
               <label>Chat ID</label>
               <div
@@ -92,8 +92,30 @@ export default function StartChat({ onJoin }) {
                 )}
               </div>
             </div>
+
+            {/* Room Name / Alias */}
             <div className="credential-row">
-              <label>Set your Password</label>
+              <label htmlFor="startRoomName">Room Name / Alias (Optional)</label>
+              <div className="input-wrapper" style={{ marginTop: "0.25rem" }}>
+                <Tag size={18} className="input-icon" />
+                <input
+                  id="startRoomName"
+                  type="text"
+                  placeholder="e.g. Project Sync, Alice & Bob"
+                  value={newChatDetails.name}
+                  onChange={(e) =>
+                    setNewChatDetails({
+                      ...newChatDetails,
+                      name: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="credential-row">
+              <label htmlFor="startPassword">Set Room Password (Required)</label>
               <div className="input-wrapper" style={{ marginTop: "0.25rem" }}>
                 <Lock size={18} className="input-icon" />
                 <input
@@ -110,12 +132,42 @@ export default function StartChat({ onJoin }) {
                 />
               </div>
             </div>
+
+            {/* Message Retention Configuration */}
+            <div className="credential-row">
+              <label>Initial Message Retention</label>
+              <div className="retention-options-grid">
+                {[
+                  { value: 3600000, label: "1 Hour" },
+                  { value: 43200000, label: "12 Hours" },
+                  { value: 86400000, label: "24 Hours" },
+                  { value: 604800000, label: "7 Days" },
+                ].map((opt) => (
+                  <button
+                    type="button"
+                    key={opt.value}
+                    className={`retention-chip ${
+                      newChatDetails.retentionPeriod === opt.value ? "active" : ""
+                    }`}
+                    onClick={() =>
+                      setNewChatDetails({
+                        ...newChatDetails,
+                        retentionPeriod: opt.value,
+                      })
+                    }
+                  >
+                    <Clock size={14} />
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+
           <div className="info-box">
             <Info size={16} />
             <span>
-              Keep this window open. The session begins when your peer joins
-              with the same Password.
+              All configuration data (room name, keys, messages) remains strictly zero-knowledge on your device.
             </span>
           </div>
 
@@ -124,12 +176,12 @@ export default function StartChat({ onJoin }) {
             disabled={!newChatDetails.password.trim() || isJoining}
             onClick={handleStart}
             style={{
-              marginTop: "1.5rem",
+              marginTop: "1rem",
               width: "100%",
               opacity: newChatDetails.password.trim() && !isJoining ? 1 : 0.5,
             }}
           >
-            {isJoining ? "Entering..." : "Enter Room"}
+            {isJoining ? "Creating Room..." : "Create & Enter Room"}
           </button>
         </div>
       </div>

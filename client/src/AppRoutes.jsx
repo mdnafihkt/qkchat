@@ -12,7 +12,7 @@ import SessionRecovery from "./components/SessionRecovery/SessionRecovery";
 export default function AppRoutes({ SOCKET_URL }) {
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
-  const [rooms, setRooms] = useState({}); // { [roomId]: { roomId, cryptoKey, messages, isConnected, unreadCount, retentionPeriod, isLocked } }
+  const [rooms, setRooms] = useState({}); // { [roomId]: { roomId, roomName, cryptoKey, messages, isConnected, unreadCount, retentionPeriod, isLocked } }
   const [activeRoomId, setActiveRoomId] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -33,13 +33,12 @@ export default function AppRoutes({ SOCKET_URL }) {
     socketRef.current = socket;
   }, [socket]);
 
-  // Read stored room list and session keys
+  // Read stored room list, session keys, and room custom names
   const getStoredActiveRooms = () => {
     try {
       const stored = localStorage.getItem("qkchat_active_rooms");
       if (stored) return JSON.parse(stored);
     } catch (e) {}
-    // Fallback to legacy single room_id if present
     const legacy = localStorage.getItem("room_id");
     return legacy ? [legacy] : [];
   };
@@ -58,7 +57,6 @@ export default function AppRoutes({ SOCKET_URL }) {
       const stored = sessionStorage.getItem("qkchat_room_keys");
       if (stored) return JSON.parse(stored);
     } catch (e) {}
-    // Fallback to legacy single chat_key
     const legacyKey = sessionStorage.getItem("chat_key");
     const legacyRoom = localStorage.getItem("room_id");
     if (legacyKey && legacyRoom) {
@@ -78,6 +76,24 @@ export default function AppRoutes({ SOCKET_URL }) {
     const keysMap = getStoredRoomKeys();
     delete keysMap[rId];
     sessionStorage.setItem("qkchat_room_keys", JSON.stringify(keysMap));
+  };
+
+  const getStoredRoomNames = () => {
+    try {
+      const stored = localStorage.getItem("qkchat_room_names");
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return {};
+  };
+
+  const setStoredRoomName = (rId, name) => {
+    const namesMap = getStoredRoomNames();
+    if (name && name.trim()) {
+      namesMap[rId] = name.trim();
+    } else {
+      delete namesMap[rId];
+    }
+    localStorage.setItem("qkchat_room_names", JSON.stringify(namesMap));
   };
 
   // Helper to load messages from ledger for a specific room
@@ -157,7 +173,6 @@ export default function AppRoutes({ SOCKET_URL }) {
     socketRef.current = newSocket;
 
     newSocket.on("connect", () => {
-      // Re-join all unlocked active rooms
       const currentRooms = roomsRef.current;
       Object.keys(currentRooms).forEach((rId) => {
         const room = currentRooms[rId];
@@ -313,7 +328,6 @@ export default function AppRoutes({ SOCKET_URL }) {
       const room = roomsRef.current[rId];
       if (!room || room.isLocked || !room.cryptoKey) return;
 
-      // Avoid duplicate display
       if (room.messages.some((m) => m.id === data.id)) return;
 
       const decryptedText = await decryptMessage(room.cryptoKey, {
@@ -398,6 +412,7 @@ export default function AppRoutes({ SOCKET_URL }) {
     const initializeRooms = async () => {
       const activeRoomIds = getStoredActiveRooms();
       const storedKeysMap = getStoredRoomKeys();
+      const storedNamesMap = getStoredRoomNames();
       const loadedRooms = {};
 
       if (activeRoomIds.length > 0) {
@@ -424,6 +439,7 @@ export default function AppRoutes({ SOCKET_URL }) {
 
           loadedRooms[rId] = {
             roomId: rId,
+            roomName: storedNamesMap[rId] || "",
             cryptoKey: key,
             messages: roomMsgs,
             isConnected: activeSock.connected,
@@ -472,8 +488,8 @@ export default function AppRoutes({ SOCKET_URL }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Join or Create a Room with Credentials
-  const handleJoinWithCredentials = async (joinRoomId, joinPassword) => {
+  // Join or Create a Room with Credentials, Custom Name, and optional Retention
+  const handleJoinWithCredentials = async (joinRoomId, joinPassword, joinRoomName = "", joinRetentionPeriod = null) => {
     try {
       const activeSock = initSocketIfNeeded();
       const key = await deriveKey(joinPassword, joinRoomId);
@@ -484,6 +500,16 @@ export default function AppRoutes({ SOCKET_URL }) {
         setStoredRoomKey(joinRoomId, jwk);
       } catch (err) {
         console.warn("Unable to persist key to sessionStorage:", err);
+      }
+
+      // Store custom room name if provided
+      if (joinRoomName && joinRoomName.trim()) {
+        setStoredRoomName(joinRoomId, joinRoomName.trim());
+      }
+
+      // Store initial retention period if provided
+      if (joinRetentionPeriod) {
+        localStorage.setItem(`qkchat_retention_${joinRoomId}`, joinRetentionPeriod.toString());
       }
 
       // Update active room list in localStorage
@@ -499,17 +525,19 @@ export default function AppRoutes({ SOCKET_URL }) {
       activeSock.emit("join_room", joinRoomId);
       autoSync(activeSock, joinRoomId);
 
-      const defaultRetention = parseInt(localStorage.getItem(`qkchat_retention_${joinRoomId}`) || "86400000");
+      const roomName = getStoredRoomNames()[joinRoomId] || (joinRoomName ? joinRoomName.trim() : "");
+      const retention = parseInt(localStorage.getItem(`qkchat_retention_${joinRoomId}`) || "86400000");
 
       setRooms((prev) => ({
         ...prev,
         [joinRoomId]: {
           roomId: joinRoomId,
+          roomName,
           cryptoKey: key,
           messages: initialMsgs,
           isConnected: activeSock.connected,
           unreadCount: 0,
-          retentionPeriod: defaultRetention,
+          retentionPeriod: retention,
           isLocked: false,
         },
       }));
@@ -520,6 +548,22 @@ export default function AppRoutes({ SOCKET_URL }) {
       console.error("Failed to join room:", err);
       return Promise.reject(err);
     }
+  };
+
+  // Set / Rename Room Name
+  const handleSetRoomName = (targetRoomId, newName) => {
+    setStoredRoomName(targetRoomId, newName);
+    setRooms((prev) => {
+      const room = prev[targetRoomId];
+      if (!room) return prev;
+      return {
+        ...prev,
+        [targetRoomId]: {
+          ...room,
+          roomName: newName.trim(),
+        },
+      };
+    });
   };
 
   // Switch Active Room View
@@ -544,13 +588,12 @@ export default function AppRoutes({ SOCKET_URL }) {
       socketRef.current.emit("leave_room", targetRoomId);
     }
 
-    // Wipe IndexedDB storage for target room
     await clearRoomMessages(targetRoomId).catch((err) => {
       console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
     });
 
-    // Remove from storage
     removeStoredRoomKey(targetRoomId);
+    setStoredRoomName(targetRoomId, "");
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
     setStoredActiveRooms(updatedList);
 
@@ -570,12 +613,10 @@ export default function AppRoutes({ SOCKET_URL }) {
     }
   };
 
-  // Unlock a locked room using password
   const handleUnlockRoom = async (targetRoomId, password) => {
     return handleJoinWithCredentials(targetRoomId, password);
   };
 
-  // Update room-specific retention period
   const handleUpdateRetentionPeriod = async (targetRoomId, newPeriod) => {
     localStorage.setItem(`qkchat_retention_${targetRoomId}`, newPeriod.toString());
     setRooms((prev) => {
@@ -616,8 +657,8 @@ export default function AppRoutes({ SOCKET_URL }) {
           path="/start"
           element={
             <StartChat
-              onJoin={async (rId, pwd) => {
-                await handleJoinWithCredentials(rId, pwd);
+              onJoin={async (rId, pwd, name, retention) => {
+                await handleJoinWithCredentials(rId, pwd, name, retention);
                 navigate("/chat");
               }}
             />
@@ -660,6 +701,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               onLeaveRoom={handleLeaveRoom}
               onUnlockRoom={handleUnlockRoom}
               onUpdateRetentionPeriod={handleUpdateRetentionPeriod}
+              onSetRoomName={handleSetRoomName}
             />
           }
         />

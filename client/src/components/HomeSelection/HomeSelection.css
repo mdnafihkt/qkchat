@@ -301,10 +301,26 @@
     min-width: 0;
 }
 
+.title-text-stack {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
 .room-card-title {
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+}
+
+.room-card-id-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: monospace;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
