@@ -1,6 +1,6 @@
 # Secure E2E Chat App
 
-A highly secure, temporary, and end-to-end encrypted chat application. 
+A highly secure, temporary, and end-to-end encrypted chat application.  Now live at <a href="https://qkchat.daimens.com" > qkchat.daimens.com </a>
 
 ## Features
 - **End-to-End Encryption**: Messages are encrypted in the browser using AES-GCM before being sent over the network.
