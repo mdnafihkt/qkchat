@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import { deriveKey, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
-import { saveMessage, getRoomMessages, updateMessageStatus, updateMessageFileBlob, clearRoomMessages, clearExpiredMessages, clearAllRoomsExcept, clearAllMessages } from "./utils/ledger";
+import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
 import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
@@ -12,65 +12,77 @@ import SessionRecovery from "./components/SessionRecovery/SessionRecovery";
 export default function AppRoutes({ SOCKET_URL }) {
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
-  const [roomId, setRoomId] = useState("");
-  const [password, setPassword] = useState("");
-  const [cryptoKey, setCryptoKey] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [sessionRecoveryNeeded, setSessionRecoveryNeeded] = useState(false);
+  const [rooms, setRooms] = useState({}); // { [roomId]: { roomId, cryptoKey, messages, isConnected, unreadCount, retentionPeriod, isLocked } }
+  const [activeRoomId, setActiveRoomId] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const [retentionPeriod, setRetentionPeriod] = useState(() => {
-    return parseInt(localStorage.getItem("qkchat_retention_period") || "86400000"); // 24h default
-  });
+  // Refs for stale closures in socket handlers
+  const roomsRef = useRef({});
+  const activeRoomIdRef = useRef("");
+  const socketRef = useRef(null);
 
-  // Keep a ref to the latest messages state to avoid stale closure issues in socket handlers
-  const messagesRef = useRef([]);
   useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+    roomsRef.current = rooms;
+  }, [rooms]);
 
-  // Periodically prune expired messages
   useEffect(() => {
-    const prune = async () => {
-      if (retentionPeriod && roomId) {
-        await clearExpiredMessages(retentionPeriod);
-        const cutoff = Date.now() - retentionPeriod;
-        setMessages((prev) => prev.filter((m) => m.timestamp >= cutoff));
-      }
-    };
+    activeRoomIdRef.current = activeRoomId;
+  }, [activeRoomId]);
 
-    prune();
-    const interval = setInterval(prune, 10000); // Check every 10 seconds
-    return () => clearInterval(interval);
-  }, [retentionPeriod, roomId]);
-
-
-  // Check for session recovery on mount
   useEffect(() => {
-    const initializeSession = async () => {
-      const storedRoomId = localStorage.getItem("room_id");
-      const storedCryptoKey = sessionStorage.getItem("chat_key");
+    socketRef.current = socket;
+  }, [socket]);
 
-      if (storedRoomId && storedCryptoKey) {
-        // Both room and key exist - auto reconnect
-        setRoomId(storedRoomId);
-        await attemptAutoReconnect(storedRoomId, storedCryptoKey);
-        navigate("/chat");
-      } else if (storedRoomId && !storedCryptoKey) {
-        // Room exists but key missing - prompt for password
-        setSessionRecoveryNeeded(true);
-        setRoomId(storedRoomId);
-        navigate("/recovery");
-      }
-      
-      setIsInitialized(true);
-    };
+  // Read stored room list and session keys
+  const getStoredActiveRooms = () => {
+    try {
+      const stored = localStorage.getItem("qkchat_active_rooms");
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    // Fallback to legacy single room_id if present
+    const legacy = localStorage.getItem("room_id");
+    return legacy ? [legacy] : [];
+  };
 
-    initializeSession();
-  }, [navigate]);
+  const setStoredActiveRooms = (roomIdsList) => {
+    localStorage.setItem("qkchat_active_rooms", JSON.stringify(roomIdsList));
+    if (roomIdsList.length > 0) {
+      localStorage.setItem("room_id", roomIdsList[0]);
+    } else {
+      localStorage.removeItem("room_id");
+    }
+  };
 
+  const getStoredRoomKeys = () => {
+    try {
+      const stored = sessionStorage.getItem("qkchat_room_keys");
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    // Fallback to legacy single chat_key
+    const legacyKey = sessionStorage.getItem("chat_key");
+    const legacyRoom = localStorage.getItem("room_id");
+    if (legacyKey && legacyRoom) {
+      return { [legacyRoom]: legacyKey };
+    }
+    return {};
+  };
+
+  const setStoredRoomKey = (rId, jwkString) => {
+    const keysMap = getStoredRoomKeys();
+    keysMap[rId] = jwkString;
+    sessionStorage.setItem("qkchat_room_keys", JSON.stringify(keysMap));
+    sessionStorage.setItem("chat_key", jwkString);
+  };
+
+  const removeStoredRoomKey = (rId) => {
+    const keysMap = getStoredRoomKeys();
+    delete keysMap[rId];
+    sessionStorage.setItem("qkchat_room_keys", JSON.stringify(keysMap));
+  };
+
+  // Helper to load messages from ledger for a specific room
   const loadMessagesFromLedger = async (targetRoomId, key) => {
+    if (!key) return [];
     try {
       const records = await getRoomMessages(targetRoomId);
       const decryptedMessages = [];
@@ -100,7 +112,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               minute: "2-digit",
               hour12: true,
             }),
-            timestamp: record.timestamp
+            timestamp: record.timestamp,
           });
         } else {
           decryptedMessages.push({
@@ -108,76 +120,112 @@ export default function AppRoutes({ SOCKET_URL }) {
             text: "[Encrypted message - Failed to decrypt]",
             isOwn: record.isOwn,
             time: new Date(record.timestamp).toLocaleTimeString(),
-            timestamp: record.timestamp
+            timestamp: record.timestamp,
           });
         }
       }
-      setMessages(decryptedMessages);
+      return decryptedMessages;
     } catch (err) {
-      console.error("Failed to load messages from ledger:", err);
+      console.error(`Failed to load messages for room ${targetRoomId}:`, err);
+      return [];
     }
   };
 
-  const autoSync = async (activeSocket, activeRoomId) => {
-    if (!activeSocket || !activeRoomId) return;
+  const autoSync = async (activeSocket, targetRoomId) => {
+    if (!activeSocket || !targetRoomId) return;
     try {
-      const records = await getRoomMessages(activeRoomId);
+      const records = await getRoomMessages(targetRoomId);
       let lastTimestamp = 0;
       if (records.length > 0) {
-        lastTimestamp = Math.max(...records.map(r => r.timestamp));
+        lastTimestamp = Math.max(...records.map((r) => r.timestamp));
       }
       activeSocket.emit("sync_request", {
-        roomId: activeRoomId,
-        timestamp: lastTimestamp
+        roomId: targetRoomId,
+        timestamp: lastTimestamp,
       });
     } catch (err) {
-      console.error("Failed to trigger autoSync:", err);
+      console.error(`Failed to trigger autoSync for room ${targetRoomId}:`, err);
     }
   };
 
-  const setupSocketListeners = (newSocket, activeRoomId, activeKey) => {
+  // Socket setup
+  const initSocketIfNeeded = () => {
+    if (socketRef.current) return socketRef.current;
+
+    const newSocket = io(SOCKET_URL);
+    setSocket(newSocket);
+    socketRef.current = newSocket;
+
     newSocket.on("connect", () => {
-      setIsConnected(true);
-      newSocket.emit("join_room", activeRoomId);
-      autoSync(newSocket, activeRoomId);
+      // Re-join all unlocked active rooms
+      const currentRooms = roomsRef.current;
+      Object.keys(currentRooms).forEach((rId) => {
+        const room = currentRooms[rId];
+        if (!room.isLocked) {
+          newSocket.emit("join_room", rId);
+          autoSync(newSocket, rId);
+        }
+      });
+
+      setRooms((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((rId) => {
+          next[rId] = { ...next[rId], isConnected: true };
+        });
+        return next;
+      });
     });
 
     newSocket.on("disconnect", () => {
-      setIsConnected(false);
+      setRooms((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((rId) => {
+          next[rId] = { ...next[rId], isConnected: false };
+        });
+        return next;
+      });
     });
 
-    newSocket.on("user_joined", (id) => {
-      autoSync(newSocket, activeRoomId);
+    newSocket.on("user_joined", (data) => {
+      const rId = typeof data === "object" ? data.roomId : data;
+      if (rId && roomsRef.current[rId]) {
+        autoSync(newSocket, rId);
+      }
     });
 
-    newSocket.on("message_delivered", async ({ messageId }) => {
-      setMessages((prev) =>
-        prev.map((msg) =>
+    newSocket.on("message_delivered", async ({ messageId, roomId: rId }) => {
+      if (!rId || !roomsRef.current[rId]) return;
+      setRooms((prev) => {
+        const room = prev[rId];
+        if (!room) return prev;
+        const updatedMessages = room.messages.map((msg) =>
           msg.id === messageId ? { ...msg, status: "delivered" } : msg
-        )
-      );
+        );
+        return { ...prev, [rId]: { ...room, messages: updatedMessages } };
+      });
       await updateMessageStatus(messageId, "delivered");
     });
 
     newSocket.on("sync_request", async (data) => {
-      const { senderId, timestamp } = data;
+      const { senderId, roomId: rId, timestamp } = data;
+      if (!rId || !roomsRef.current[rId]) return;
       try {
-        const records = await getRoomMessages(activeRoomId);
+        const records = await getRoomMessages(rId);
         const pendingMessages = records
-          .filter(r => r.timestamp > timestamp)
-          .map(r => ({
+          .filter((r) => r.timestamp > timestamp)
+          .map((r) => ({
             id: r.messageId,
             timestamp: r.timestamp,
             ciphertext: r.ciphertext,
             iv: r.iv,
-            wasOwn: r.isOwn
+            wasOwn: r.isOwn,
           }));
 
         if (pendingMessages.length > 0) {
           newSocket.emit("sync_response", {
-            roomId: activeRoomId,
+            roomId: rId,
             recipientId: senderId,
-            messages: pendingMessages
+            messages: pendingMessages,
           });
         }
       } catch (err) {
@@ -186,16 +234,19 @@ export default function AppRoutes({ SOCKET_URL }) {
     });
 
     newSocket.on("sync_response", async (data) => {
-      const { messages: syncMessages } = data;
-      if (!syncMessages || syncMessages.length === 0) return;
+      const { roomId: rId, messages: syncMessages } = data;
+      if (!rId || !roomsRef.current[rId] || !syncMessages || syncMessages.length === 0) return;
+
+      const room = roomsRef.current[rId];
+      if (room.isLocked || !room.cryptoKey) return;
 
       const newRemoteMessages = [];
       for (const item of syncMessages) {
-        if (messagesRef.current.some(m => m.id === item.id)) {
+        if (room.messages.some((m) => m.id === item.id)) {
           continue;
         }
 
-        const decryptedText = await decryptMessage(activeKey, {
+        const decryptedText = await decryptMessage(room.cryptoKey, {
           ciphertext: item.ciphertext,
           iv: item.iv,
         });
@@ -219,56 +270,69 @@ export default function AppRoutes({ SOCKET_URL }) {
               minute: "2-digit",
               hour12: true,
             }),
-            timestamp: item.timestamp
+            timestamp: item.timestamp,
           });
         }
       }
 
       if (newRemoteMessages.length > 0) {
-        setMessages((prev) => [...prev, ...newRemoteMessages]);
+        setRooms((prev) => {
+          const currentRoom = prev[rId];
+          if (!currentRoom) return prev;
+          const merged = [...currentRoom.messages, ...newRemoteMessages];
+          const isCurrentActive = activeRoomIdRef.current === rId;
+          return {
+            ...prev,
+            [rId]: {
+              ...currentRoom,
+              messages: merged,
+              unreadCount: isCurrentActive ? 0 : currentRoom.unreadCount + newRemoteMessages.length,
+            },
+          };
+        });
 
         for (const msg of newRemoteMessages) {
-          const originalItem = syncMessages.find(x => x.id === msg.id);
-          await saveMessage(activeRoomId, {
+          const originalItem = syncMessages.find((x) => x.id === msg.id);
+          await saveMessage(rId, {
             messageId: msg.id,
             timestamp: msg.timestamp,
             isOwn: msg.isOwn,
             status: msg.status,
             ciphertext: originalItem.ciphertext,
-            iv: originalItem.iv
+            iv: originalItem.iv,
           });
         }
       }
     });
 
     newSocket.on("receive_message", async (data) => {
-      if (data.senderId === newSocket.id) {
-        return;
-      }
-      
-      if (!activeKey) return;
+      if (data.senderId === newSocket.id) return;
+      const rId = data.roomId || activeRoomIdRef.current;
+      if (!rId) return;
+
+      const room = roomsRef.current[rId];
+      if (!room || room.isLocked || !room.cryptoKey) return;
 
       // Avoid duplicate display
-      if (messagesRef.current.some(m => m.id === data.id)) {
-        return;
-      }
-      
-      const decryptedText = await decryptMessage(activeKey, {
+      if (room.messages.some((m) => m.id === data.id)) return;
+
+      const decryptedText = await decryptMessage(room.cryptoKey, {
         ciphertext: data.ciphertext,
         iv: data.iv,
       });
 
+      const timestamp = Date.now();
+      let newMessageObj;
+
       if (decryptedText === null) {
-        console.error("Failed to decrypt message");
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            text: "[Encrypted message - Failed to decrypt]",
-            isOwn: false,
-            time: new Date().toLocaleTimeString(),
-          },
-        ]);
+        console.error(`Failed to decrypt message for room ${rId}`);
+        newMessageObj = {
+          id: Date.now(),
+          text: "[Encrypted message - Failed to decrypt]",
+          isOwn: false,
+          time: new Date().toLocaleTimeString(),
+          timestamp,
+        };
       } else {
         let msgData;
         try {
@@ -278,173 +342,258 @@ export default function AppRoutes({ SOCKET_URL }) {
         }
 
         const messageId = msgData.id || Date.now();
-        
-        // Avoid duplicate display
-        if (messagesRef.current.some(m => m.id === messageId)) {
-          return;
-        }
+        if (room.messages.some((m) => m.id === messageId)) return;
 
-        const timestamp = Date.now();
-
-        await saveMessage(activeRoomId, {
+        await saveMessage(rId, {
           messageId,
           timestamp,
           isOwn: false,
           status: "sent",
           ciphertext: data.ciphertext,
-          iv: data.iv
+          iv: data.iv,
         });
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: messageId,
-            ...msgData,
-            senderId: data.senderId,
-            isOwn: false,
-            time: new Date(timestamp).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            }),
-            timestamp
-          },
-        ]);
+        newMessageObj = {
+          id: messageId,
+          ...msgData,
+          senderId: data.senderId,
+          isOwn: false,
+          time: new Date(timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          }),
+          timestamp,
+        };
 
         if (msgData.id && msgData.type !== "file") {
           newSocket.emit("message_delivered", {
-            roomId: activeRoomId,
+            roomId: rId,
             messageId: msgData.id,
             senderId: data.senderId,
           });
         }
       }
-    });
-  };
 
-  const attemptAutoReconnect = async (reconnectRoomId, reconnectKeyStr) => {
-    try {
-      if (socket) {
-        socket.disconnect();
-      }
-
-      const key = await importKeyFromJWK(reconnectKeyStr);
-      setCryptoKey(key);
-      await loadMessagesFromLedger(reconnectRoomId, key);
-
-      const newSocket = io(SOCKET_URL);
-      setSocket(newSocket);
-
-      return new Promise((resolve, reject) => {
-        setupSocketListeners(newSocket, reconnectRoomId, key);
-
-        newSocket.on("connect", () => {
-          resolve();
-        });
-
-        newSocket.on("connect_error", (err) => {
-          reject(err);
-        });
+      setRooms((prev) => {
+        const currentRoom = prev[rId];
+        if (!currentRoom) return prev;
+        const isCurrentActive = activeRoomIdRef.current === rId;
+        return {
+          ...prev,
+          [rId]: {
+            ...currentRoom,
+            messages: [...currentRoom.messages, newMessageObj],
+            unreadCount: isCurrentActive ? 0 : currentRoom.unreadCount + 1,
+          },
+        };
       });
-    } catch (err) {
-      console.error("Auto-reconnect failed:", err);
-      sessionStorage.removeItem("chat_key");
-      setSessionRecoveryNeeded(true);
-      navigate("/recovery");
-    }
+    });
+
+    return newSocket;
   };
 
-  const handleJoinWithCredentials = async (joinRoomId, joinPassword) => {
-    if (socket) {
-      socket.disconnect();
-    }
+  // Initialize active rooms on mount
+  useEffect(() => {
+    const initializeRooms = async () => {
+      const activeRoomIds = getStoredActiveRooms();
+      const storedKeysMap = getStoredRoomKeys();
+      const loadedRooms = {};
 
-    try {
-      const oldRoomId = localStorage.getItem("room_id");
-      if (oldRoomId && oldRoomId !== joinRoomId) {
-        await clearAllRoomsExcept(joinRoomId);
-        sessionStorage.removeItem("chat_key");
+      if (activeRoomIds.length > 0) {
+        const activeSock = initSocketIfNeeded();
+
+        for (const rId of activeRoomIds) {
+          const jwkStr = storedKeysMap[rId];
+          let key = null;
+          let isLocked = true;
+          let roomMsgs = [];
+
+          if (jwkStr) {
+            try {
+              key = await importKeyFromJWK(jwkStr);
+              isLocked = false;
+              roomMsgs = await loadMessagesFromLedger(rId, key);
+              activeSock.emit("join_room", rId);
+              autoSync(activeSock, rId);
+            } catch (err) {
+              console.warn(`Failed to import key for room ${rId}:`, err);
+              isLocked = true;
+            }
+          }
+
+          loadedRooms[rId] = {
+            roomId: rId,
+            cryptoKey: key,
+            messages: roomMsgs,
+            isConnected: activeSock.connected,
+            unreadCount: 0,
+            retentionPeriod: parseInt(localStorage.getItem(`qkchat_retention_${rId}`) || "86400000"),
+            isLocked,
+          };
+        }
+
+        setRooms(loadedRooms);
+        setActiveRoomId(activeRoomIds[0]);
       }
 
-      const key = await deriveKey(joinPassword, joinRoomId);
-      setCryptoKey(key);
+      setIsInitialized(true);
+    };
 
-      localStorage.setItem("room_id", joinRoomId);
-      
+    initializeRooms();
+  }, []);
+
+  // Periodically prune expired messages across all unlocked rooms
+  useEffect(() => {
+    const pruneAllRooms = async () => {
+      const currentRooms = roomsRef.current;
+      for (const rId of Object.keys(currentRooms)) {
+        const room = currentRooms[rId];
+        if (room && room.retentionPeriod) {
+          await clearExpiredMessages(room.retentionPeriod);
+          const cutoff = Date.now() - room.retentionPeriod;
+          setRooms((prev) => {
+            const target = prev[rId];
+            if (!target) return prev;
+            return {
+              ...prev,
+              [rId]: {
+                ...target,
+                messages: target.messages.filter((m) => m.timestamp >= cutoff),
+              },
+            };
+          });
+        }
+      }
+    };
+
+    pruneAllRooms();
+    const interval = setInterval(pruneAllRooms, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Join or Create a Room with Credentials
+  const handleJoinWithCredentials = async (joinRoomId, joinPassword) => {
+    try {
+      const activeSock = initSocketIfNeeded();
+      const key = await deriveKey(joinPassword, joinRoomId);
+
+      // Save key in sessionStorage
       try {
         const jwk = await exportKeyToJWK(key);
-        sessionStorage.setItem("chat_key", jwk);
+        setStoredRoomKey(joinRoomId, jwk);
       } catch (err) {
-        console.warn("Unable to persist crypto key for session recovery:", err);
+        console.warn("Unable to persist key to sessionStorage:", err);
       }
 
-      await clearExpiredMessages(retentionPeriod);
-      await loadMessagesFromLedger(joinRoomId, key);
+      // Update active room list in localStorage
+      const currentList = getStoredActiveRooms();
+      if (!currentList.includes(joinRoomId)) {
+        currentList.push(joinRoomId);
+        setStoredActiveRooms(currentList);
+      }
 
-      const newSocket = io(SOCKET_URL);
-      setSocket(newSocket);
-      setRoomId(joinRoomId);
-      setPassword(joinPassword);
-      setSessionRecoveryNeeded(false);
+      const initialMsgs = await loadMessagesFromLedger(joinRoomId, key);
 
-      return new Promise((resolve, reject) => {
-        setupSocketListeners(newSocket, joinRoomId, key);
+      // Emit join room on socket
+      activeSock.emit("join_room", joinRoomId);
+      autoSync(activeSock, joinRoomId);
 
-        newSocket.on("connect", () => {
-          resolve();
-        });
+      const defaultRetention = parseInt(localStorage.getItem(`qkchat_retention_${joinRoomId}`) || "86400000");
 
-        newSocket.on("connect_error", (err) => {
-          reject(err);
-        });
-      });
+      setRooms((prev) => ({
+        ...prev,
+        [joinRoomId]: {
+          roomId: joinRoomId,
+          cryptoKey: key,
+          messages: initialMsgs,
+          isConnected: activeSock.connected,
+          unreadCount: 0,
+          retentionPeriod: defaultRetention,
+          isLocked: false,
+        },
+      }));
+
+      setActiveRoomId(joinRoomId);
+      return Promise.resolve();
     } catch (err) {
-      console.error(err);
-      throw err;
+      console.error("Failed to join room:", err);
+      return Promise.reject(err);
     }
   };
 
-  const handleUpdateRetentionPeriod = async (newPeriod) => {
-    setRetentionPeriod(newPeriod);
-    localStorage.setItem("qkchat_retention_period", newPeriod.toString());
-    await clearExpiredMessages(newPeriod);
-    const cutoff = Date.now() - newPeriod;
-    setMessages((prev) => prev.filter((m) => m.timestamp >= cutoff));
+  // Switch Active Room View
+  const handleSwitchRoom = (targetRoomId) => {
+    setActiveRoomId(targetRoomId);
+    setRooms((prev) => {
+      const room = prev[targetRoomId];
+      if (!room) return prev;
+      return {
+        ...prev,
+        [targetRoomId]: {
+          ...room,
+          unreadCount: 0,
+        },
+      };
+    });
   };
 
-  const handleLeave = () => {
-    if (socket) {
-      socket.disconnect();
+  // Leave / Close a specific Room
+  const handleLeaveRoom = async (targetRoomId) => {
+    if (socketRef.current) {
+      socketRef.current.emit("leave_room", targetRoomId);
     }
-    setSocket(null);
-    setCryptoKey(null);
-    setMessages([]);
-    setRoomId("");
-    setPassword("");
-    localStorage.removeItem("room_id");
-    sessionStorage.removeItem("chat_key");
-    setSessionRecoveryNeeded(false);
 
-    // Completely wipe all room data and messages from IndexedDB for maximum security
-    clearAllMessages().catch(err => {
-      console.error("Failed to clear messages from ledger:", err);
+    // Wipe IndexedDB storage for target room
+    await clearRoomMessages(targetRoomId).catch((err) => {
+      console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
     });
 
-    // Clear caches
-    if ('caches' in window) {
-      caches.keys().then((names) => {
-        for (let name of names) {
-          caches.delete(name);
-        }
-      }).catch(err => {
-        console.error("Failed to clear cache storage:", err);
-      });
+    // Remove from storage
+    removeStoredRoomKey(targetRoomId);
+    const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
+    setStoredActiveRooms(updatedList);
+
+    setRooms((prev) => {
+      const next = { ...prev };
+      delete next[targetRoomId];
+      return next;
+    });
+
+    if (activeRoomId === targetRoomId) {
+      if (updatedList.length > 0) {
+        setActiveRoomId(updatedList[0]);
+      } else {
+        setActiveRoomId("");
+        navigate("/");
+      }
     }
+  };
+
+  // Unlock a locked room using password
+  const handleUnlockRoom = async (targetRoomId, password) => {
+    return handleJoinWithCredentials(targetRoomId, password);
+  };
+
+  // Update room-specific retention period
+  const handleUpdateRetentionPeriod = async (targetRoomId, newPeriod) => {
+    localStorage.setItem(`qkchat_retention_${targetRoomId}`, newPeriod.toString());
+    setRooms((prev) => {
+      const room = prev[targetRoomId];
+      if (!room) return prev;
+      return {
+        ...prev,
+        [targetRoomId]: { ...room, retentionPeriod: newPeriod },
+      };
+    });
+    await clearExpiredMessages(newPeriod);
   };
 
   if (!isInitialized) {
     return null;
   }
+
+  const currentActiveRoom = rooms[activeRoomId] || null;
 
   return (
     <div className="app-container">
@@ -452,18 +601,35 @@ export default function AppRoutes({ SOCKET_URL }) {
         <Route path="/" element={<HomeSelection />} />
         <Route
           path="/start"
-          element={<StartChat onJoin={handleJoinWithCredentials} />}
+          element={
+            <StartChat
+              onJoin={async (rId, pwd) => {
+                await handleJoinWithCredentials(rId, pwd);
+                navigate("/chat");
+              }}
+            />
+          }
         />
         <Route
           path="/join"
-          element={<JoinChat onJoin={handleJoinWithCredentials} />}
+          element={
+            <JoinChat
+              onJoin={async (rId, pwd) => {
+                await handleJoinWithCredentials(rId, pwd);
+                navigate("/chat");
+              }}
+            />
+          }
         />
         <Route
           path="/recovery"
           element={
             <SessionRecovery
-              roomId={roomId}
-              onRecoveryComplete={handleJoinWithCredentials}
+              roomId={activeRoomId || (getStoredActiveRooms()[0] || "")}
+              onRecoveryComplete={async (rId, pwd) => {
+                await handleUnlockRoom(rId, pwd);
+                navigate("/chat");
+              }}
             />
           }
         />
@@ -472,13 +638,14 @@ export default function AppRoutes({ SOCKET_URL }) {
           element={
             <ChatPage
               socket={socket}
-              cryptoKey={cryptoKey}
-              roomId={roomId}
-              messages={messages}
-              setMessages={setMessages}
-              isConnected={isConnected}
-              handleLeave={handleLeave}
-              retentionPeriod={retentionPeriod}
+              rooms={rooms}
+              activeRoomId={activeRoomId}
+              currentRoom={currentActiveRoom}
+              setRooms={setRooms}
+              onSwitchRoom={handleSwitchRoom}
+              onJoinNewRoom={handleJoinWithCredentials}
+              onLeaveRoom={handleLeaveRoom}
+              onUnlockRoom={handleUnlockRoom}
               onUpdateRetentionPeriod={handleUpdateRetentionPeriod}
             />
           }
