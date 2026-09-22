@@ -95,12 +95,13 @@ body,
 .message-bubble {
     width: fit-content;
     max-width: 70%;
-    padding: 0.3rem 1rem;
-    border-radius: 16px;
+    padding: 0.3rem;
+    border-radius: 8px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .message-bubble .text {
+    padding: 0.3rem;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -301,11 +302,9 @@ body,
 .attached-file {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
     background: rgba(0, 0, 0, 0.2);
     padding: 0.75rem 1rem;
     border-radius: 8px;
-    margin-bottom: 0.25rem;
 }
 
 .file-icon {

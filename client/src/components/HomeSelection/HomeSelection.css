@@ -10,7 +10,7 @@
 @media(max-width: 486px) {
     .home-container {
         padding: 20px 10px;
-        gap: 1.5rem;
+        gap: 4rem;
     }
 }
 .home-header {
@@ -29,8 +29,7 @@
 
 @media(max-width: 486px) {
     .logo-container {
-        display: flex;
-        gap:10px;
+        display: flex;        
         justify-content: center;
         align-items: center;
         margin-bottom: 0;

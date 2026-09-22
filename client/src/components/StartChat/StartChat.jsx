@@ -129,7 +129,7 @@ export default function StartChat({ onJoin }) {
               opacity: newChatDetails.password.trim() && !isJoining ? 1 : 0.5,
             }}
           >
-            {isJoining ? "Entering info..." : "Enter Room"}
+            {isJoining ? "Entering..." : "Enter Room"}
           </button>
         </div>
       </div>
