@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import { deriveKey, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
+import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
 import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
@@ -177,7 +178,8 @@ export default function AppRoutes({ SOCKET_URL }) {
       Object.keys(currentRooms).forEach((rId) => {
         const room = currentRooms[rId];
         if (!room.isLocked) {
-          newSocket.emit("join_room", rId);
+          const peerId = getOrCreateRoomPeerId(rId);
+          newSocket.emit("join_room", { roomId: rId, peerId });
           autoSync(newSocket, rId);
         }
       });
@@ -198,6 +200,19 @@ export default function AppRoutes({ SOCKET_URL }) {
           next[rId] = { ...next[rId], isConnected: false };
         });
         return next;
+      });
+    });
+
+    newSocket.on("room_full", ({ roomId: rId, message }) => {
+      if (!rId) return;
+      console.warn(`Room full rejection for ${rId}: ${message}`);
+      setRooms((prev) => {
+        const room = prev[rId];
+        if (!room) return prev;
+        return {
+          ...prev,
+          [rId]: { ...room, isRoomFull: true },
+        };
       });
     });
 
@@ -429,7 +444,8 @@ export default function AppRoutes({ SOCKET_URL }) {
               key = await importKeyFromJWK(jwkStr);
               isLocked = false;
               roomMsgs = await loadMessagesFromLedger(rId, key);
-              activeSock.emit("join_room", rId);
+              const peerId = getOrCreateRoomPeerId(rId);
+              activeSock.emit("join_room", { roomId: rId, peerId });
               autoSync(activeSock, rId);
             } catch (err) {
               console.warn(`Failed to import key for room ${rId}:`, err);
@@ -521,8 +537,9 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       const initialMsgs = await loadMessagesFromLedger(joinRoomId, key);
 
-      // Emit join room on socket
-      activeSock.emit("join_room", joinRoomId);
+      // Get or create per-room peer ID and emit join room on socket
+      const peerId = getOrCreateRoomPeerId(joinRoomId);
+      activeSock.emit("join_room", { roomId: joinRoomId, peerId });
       autoSync(activeSock, joinRoomId);
 
       const roomName = getStoredRoomNames()[joinRoomId] || (joinRoomName ? joinRoomName.trim() : "");
@@ -584,8 +601,9 @@ export default function AppRoutes({ SOCKET_URL }) {
 
   // Leave / Close a specific Room
   const handleLeaveRoom = async (targetRoomId) => {
+    const peerId = getOrCreateRoomPeerId(targetRoomId);
     if (socketRef.current) {
-      socketRef.current.emit("leave_room", targetRoomId);
+      socketRef.current.emit("leave_room", { roomId: targetRoomId, peerId, clearSlot: true });
     }
 
     await clearRoomMessages(targetRoomId).catch((err) => {
@@ -593,6 +611,7 @@ export default function AppRoutes({ SOCKET_URL }) {
     });
 
     removeStoredRoomKey(targetRoomId);
+    removeRoomPeerId(targetRoomId);
     setStoredRoomName(targetRoomId, "");
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
     setStoredActiveRooms(updatedList);

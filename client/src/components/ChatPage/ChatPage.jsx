@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Home,
   Tag,
+  ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage, encryptBinary, decryptBinary } from "../../utils/crypto";
@@ -696,7 +697,34 @@ export default function ChatPage({
 
         {/* Chat Main Section */}
         <div className="chat-main-content">
-          {isLocked ? (
+          {currentRoom?.isRoomFull ? (
+            /* Room Capacity Exceeded View */
+            <div className="locked-room-container">
+              <div className="locked-card glass-panel">
+                <ShieldAlert size={48} className="text-primary locked-icon" style={{ color: "var(--accent-danger, #ef4444)" }} />
+                <h3>Room Capacity Reached</h3>
+                <p className="locked-desc">
+                  Room <strong>{activeRoomId}</strong> already has 2 registered peers. In accordance with QkChat's two-peer security model, third-party access is restricted.
+                </p>
+                <div className="unlock-actions" style={{ marginTop: "1.5rem" }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => navigate("/")}
+                  >
+                    Return to Home Hub
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => onLeaveRoom(activeRoomId)}
+                  >
+                    Remove Room
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : isLocked ? (
             /* Locked Room View */
             <div className="locked-room-container">
               <div className="locked-card glass-panel">

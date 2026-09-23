@@ -63,6 +63,19 @@ function isValidRoomId(roomId) {
   return typeof roomId === 'string' && roomId.trim().length > 0 && roomId.length <= 128;
 }
 
+// In-memory active room tracker (runtime state only, zero server persistence)
+const activeRooms = new Map();
+
+function getOrCreateRoomState(roomId) {
+  if (!activeRooms.has(roomId)) {
+    activeRooms.set(roomId, {
+      registeredPeers: new Set(),
+      activeSockets: new Map(),
+    });
+  }
+  return activeRooms.get(roomId);
+}
+
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
@@ -74,20 +87,77 @@ io.on('connection', (socket) => {
     next();
   });
 
-  // User joins a room identified by the chat ID
-  socket.on('join_room', (roomId) => {
-    if (!isValidRoomId(roomId)) return;
+  // User joins a room identified by the chat ID with mandatory 2-peer capacity check
+  socket.on('join_room', (data, ackCallback) => {
+    let roomId, peerId;
+    if (typeof data === 'object' && data !== null) {
+      roomId = data.roomId;
+      peerId = data.peerId;
+    } else {
+      roomId = data;
+    }
+
+    if (!isValidRoomId(roomId)) {
+      if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_ROOM_ID' });
+      return;
+    }
+
+    if (peerId && typeof peerId === 'string') {
+      const roomState = getOrCreateRoomState(roomId);
+
+      // Enforce Two-Peer Trust Model: block any 3rd unique peer from joining
+      if (!roomState.registeredPeers.has(peerId)) {
+        if (roomState.registeredPeers.size >= 2) {
+          console.log(`Rejecting socket ${socket.id} (peer ${peerId}): Room ${roomId} capacity full (2 peers max).`);
+          socket.emit('room_full', { roomId, message: 'Room capacity reached. Only 2 peers allowed per room.' });
+          if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'ROOM_FULL' });
+          return;
+        }
+        roomState.registeredPeers.add(peerId);
+      }
+
+      roomState.activeSockets.set(socket.id, peerId);
+      socket.currentRoomId = roomId;
+      socket.currentPeerId = peerId;
+    }
 
     socket.join(roomId);
-    console.log(`User ${socket.id} joined room: ${roomId}`);
+    console.log(`User ${socket.id} (peer ${peerId || 'legacy'}) joined room: ${roomId}`);
     socket.to(roomId).emit('user_joined', { roomId, senderId: socket.id });
+
+    if (typeof ackCallback === 'function') ackCallback({ success: true });
   });
 
-  // User leaves a specific room
-  socket.on('leave_room', (roomId) => {
+  // User leaves a specific room (optionally clearing their peer registration slot)
+  socket.on('leave_room', (data) => {
+    let roomId, peerId, clearSlot;
+    if (typeof data === 'object' && data !== null) {
+      roomId = data.roomId;
+      peerId = data.peerId;
+      clearSlot = data.clearSlot;
+    } else {
+      roomId = data;
+    }
+
     if (!isValidRoomId(roomId)) return;
     socket.leave(roomId);
     console.log(`User ${socket.id} left room: ${roomId}`);
+
+    const roomState = activeRooms.get(roomId);
+    if (roomState) {
+      roomState.activeSockets.delete(socket.id);
+      if (clearSlot && (peerId || socket.currentPeerId)) {
+        const targetPeerId = peerId || socket.currentPeerId;
+        roomState.registeredPeers.delete(targetPeerId);
+        console.log(`Cleared peer slot ${targetPeerId} for room: ${roomId}`);
+      }
+      if (roomState.activeSockets.size === 0 && roomState.registeredPeers.size === 0) {
+        activeRooms.delete(roomId);
+      }
+    }
+
+    socket.currentRoomId = null;
+    socket.currentPeerId = null;
   });
 
   // Relay encrypted messages directly to the room
@@ -159,6 +229,15 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
+    if (socket.currentRoomId) {
+      const roomState = activeRooms.get(socket.currentRoomId);
+      if (roomState) {
+        roomState.activeSockets.delete(socket.id);
+        if (roomState.activeSockets.size === 0 && roomState.registeredPeers.size === 0) {
+          activeRooms.delete(socket.currentRoomId);
+        }
+      }
+    }
   });
 });
 
