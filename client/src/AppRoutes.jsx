@@ -9,12 +9,14 @@ import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
 import ChatPage from "./components/ChatPage/ChatPage";
 import SessionRecovery from "./components/SessionRecovery/SessionRecovery";
+import SharePicker from "./components/SharePicker/SharePicker";
 
 export default function AppRoutes({ SOCKET_URL }) {
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
   const [rooms, setRooms] = useState({}); // { [roomId]: { roomId, roomName, cryptoKey, messages, isConnected, unreadCount, retentionPeriod, isLocked } }
   const [activeRoomId, setActiveRoomId] = useState("");
+  const [pendingSharedItem, setPendingSharedItem] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Refs for stale closures in socket handlers
@@ -707,6 +709,18 @@ export default function AppRoutes({ SOCKET_URL }) {
           }
         />
         <Route
+          path="/share"
+          element={
+            <SharePicker
+              rooms={rooms}
+              onSelectRoomForShare={(rId, payload) => {
+                handleSwitchRoom(rId);
+                setPendingSharedItem({ roomId: rId, payload });
+              }}
+            />
+          }
+        />
+        <Route
           path="/chat"
           element={
             <ChatPage
@@ -714,6 +728,8 @@ export default function AppRoutes({ SOCKET_URL }) {
               rooms={rooms}
               activeRoomId={activeRoomId}
               currentRoom={currentActiveRoom}
+              pendingSharedItem={pendingSharedItem}
+              onClearPendingSharedItem={() => setPendingSharedItem(null)}
               setRooms={setRooms}
               onSwitchRoom={handleSwitchRoom}
               onJoinNewRoom={handleJoinWithCredentials}

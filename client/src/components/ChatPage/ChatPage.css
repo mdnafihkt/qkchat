@@ -829,6 +829,15 @@ body,
     transform: translateY(-1px);
 }
 
+@media (max-width: 468px) {
+    .btn-header-home {
+        padding: 0.5rem;
+        font-size: 0.75rem;
+    }
+    .btn-header-home .text{
+        display: none;
+    }   
+}
 /* Multi-Room Header Chips & Bar */
 .header-rooms-bar {
     display: flex;

@@ -53,6 +53,8 @@ export default function ChatPage({
   rooms = {},
   activeRoomId = "",
   currentRoom = null,
+  pendingSharedItem = null,
+  onClearPendingSharedItem = () => {},
   setRooms,
   onSwitchRoom,
   onJoinNewRoom,
@@ -294,8 +296,7 @@ export default function ChatPage({
     return "file";
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
+  const processFileSend = async (file) => {
     if (!file || !socket || !cryptoKey || isLocked) return;
 
     const maxSize = 50 * 1024 * 1024;
@@ -437,9 +438,34 @@ export default function ChatPage({
         [transferId]: { progress: 0, status: "Failed" }
       }));
     }
+  };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      processFileSend(file);
+    }
     e.target.value = null;
   };
+
+  // Process incoming shared payload from Web Share Target API
+  useEffect(() => {
+    if (
+      pendingSharedItem &&
+      pendingSharedItem.roomId === activeRoomId &&
+      cryptoKey &&
+      !isLocked
+    ) {
+      const { payload } = pendingSharedItem;
+      if (payload?.fileBlob) {
+        processFileSend(payload.fileBlob);
+      } else if (payload?.text || payload?.url) {
+        const sharedText = payload.text || payload.url;
+        setNewMessage(sharedText);
+      }
+      onClearPendingSharedItem();
+    }
+  }, [activeRoomId, pendingSharedItem, cryptoKey, isLocked]);
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -493,7 +519,7 @@ export default function ChatPage({
                 title="Back to Home Hub"
               >
                 <Home size={20} />
-                <span>Home</span>
+                <span class="text">Home</span>
               </button>
               <button
                 onClick={() => onLeaveRoom(activeRoomId)}
@@ -501,7 +527,7 @@ export default function ChatPage({
                 title="Leave Current Room"
               >
                 <LogOut size={20} />
-                <span>Leave Room</span>
+                <span class="text">Leave Room</span>
               </button>
             </>
           )}
@@ -722,7 +748,7 @@ export default function ChatPage({
                     className="btn-primary"
                     onClick={() => navigate("/")}
                   >
-                    Return to Home Hub
+                    Return Home
                   </button>
                   <button
                     type="button"
@@ -930,7 +956,7 @@ export default function ChatPage({
                   <Paperclip size={20} />
                 </button>
                 <textarea
-                  placeholder={`Message in ${activeRoomId}...`}
+                  placeholder="Message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={handleKeyDown}

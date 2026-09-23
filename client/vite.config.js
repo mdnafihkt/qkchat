@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       registerType: 'autoUpdate',
       includeAssets: ['qkchat-circle.png', 'qkchat.png'],
       manifest: {
@@ -33,7 +36,23 @@ export default defineConfig({
             type: 'image/webp',
             purpose: 'any maskable'
           }
-        ]
+        ],
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+            files: [
+              {
+                name: 'file',
+                accept: ['*/*']
+              }
+            ]
+          }
+        }
       }
     })
   ],

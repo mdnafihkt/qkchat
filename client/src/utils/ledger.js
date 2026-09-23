@@ -1,9 +1,9 @@
 const DB_NAME = "QkChatLedger";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export function initDB() {
   return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = (event) => {
       console.error("IndexedDB error:", event.target.error);
@@ -23,6 +23,9 @@ export function initDB() {
         });
         store.createIndex("roomId", "roomId", { unique: false });
         store.createIndex("messageId", "messageId", { unique: true });
+      }
+      if (!db.objectStoreNames.contains("shared_payload")) {
+        db.createObjectStore("shared_payload", { keyPath: "id" });
       }
     };
   });
@@ -216,21 +219,38 @@ export async function clearAllRoomsExcept(activeRoomId) {
   });
 }
 
-// Clear all messages in the entire database
-export async function clearAllMessages() {
+// Shared Payload Store (for Web Share Target API)
+export async function saveSharedPayload(payload) {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(["messages"], "readwrite");
-    const store = transaction.objectStore("messages");
-    const request = store.clear();
+    const transaction = db.transaction(["shared_payload"], "readwrite");
+    const store = transaction.objectStore("shared_payload");
+    const record = { id: "latest", ...payload, timestamp: Date.now() };
+    const request = store.put(record);
+    request.onsuccess = () => resolve(true);
+    request.onerror = (event) => reject(event.target.error);
+  });
+}
 
-    request.onsuccess = () => {
-      resolve();
-    };
+export async function getSharedPayload() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["shared_payload"], "readonly");
+    const store = transaction.objectStore("shared_payload");
+    const request = store.get("latest");
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = (event) => reject(event.target.error);
+  });
+}
 
-    request.onerror = (event) => {
-      reject(event.target.error);
-    };
+export async function clearSharedPayload() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["shared_payload"], "readwrite");
+    const store = transaction.objectStore("shared_payload");
+    const request = store.delete("latest");
+    request.onsuccess = () => resolve(true);
+    request.onerror = (event) => reject(event.target.error);
   });
 }
 
