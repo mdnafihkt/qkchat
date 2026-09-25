@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import io from "socket.io-client";
+import { AlertCircle, X } from "lucide-react";
 import { deriveKey, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
@@ -11,6 +12,17 @@ import ChatPage from "./components/ChatPage/ChatPage";
 import SessionRecovery from "./components/SessionRecovery/SessionRecovery";
 import SharePicker from "./components/SharePicker/SharePicker";
 
+// Helper component to trigger error toast notification and redirect Home
+function FallbackRedirect({ onError }) {
+  const location = useLocation();
+
+  useEffect(() => {
+    onError(`The page or route "${location.pathname}" does not exist.`);
+  }, [location.pathname, onError]);
+
+  return <Navigate to="/" replace />;
+}
+
 export default function AppRoutes({ SOCKET_URL }) {
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
@@ -18,6 +30,20 @@ export default function AppRoutes({ SOCKET_URL }) {
   const [activeRoomId, setActiveRoomId] = useState("");
   const [pendingSharedItem, setPendingSharedItem] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [errorToast, setErrorToast] = useState("");
+
+  const triggerErrorToast = (msg) => {
+    setErrorToast(msg);
+  };
+
+  useEffect(() => {
+    if (errorToast) {
+      const timer = setTimeout(() => {
+        setErrorToast("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorToast]);
 
   // Refs for stale closures in socket handlers
   const roomsRef = useRef({});
@@ -756,7 +782,24 @@ export default function AppRoutes({ SOCKET_URL }) {
             />
           }
         />
+
+        {/* Catch-all fallback route for non-existing pages */}
+        <Route
+          path="*"
+          element={<FallbackRedirect onError={triggerErrorToast} />}
+        />
       </Routes>
+
+      {/* Global Error Notification Toast */}
+      {errorToast && (
+        <div className="global-error" role="alert">
+          <AlertCircle size={18} />
+          <span>{errorToast}</span>
+          <button onClick={() => setErrorToast("")} title="Dismiss notification">
+            <X size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
