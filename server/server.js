@@ -227,6 +227,19 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Handle room deletion for all connected users in a room
+  socket.on('delete_room', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const { roomId } = data;
+    if (!isValidRoomId(roomId)) return;
+
+    console.log(`User ${socket.id} deleted room for all: ${roomId}`);
+    io.to(roomId).emit('room_deleted', { roomId, deletedBy: socket.id });
+
+    // Clean up active room state
+    activeRooms.delete(roomId);
+  });
+
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
     if (socket.currentRoomId) {

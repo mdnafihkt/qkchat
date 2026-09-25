@@ -421,6 +421,13 @@ export default function AppRoutes({ SOCKET_URL }) {
       });
     });
 
+    newSocket.on("room_deleted", async (data) => {
+      const rId = typeof data === "object" ? data.roomId : data;
+      if (rId) {
+        await handleLeaveRoom(rId);
+      }
+    });
+
     return newSocket;
   };
 
@@ -634,6 +641,14 @@ export default function AppRoutes({ SOCKET_URL }) {
     }
   };
 
+  // Delete Room for ALL peers in the room
+  const handleDeleteRoomForAll = async (targetRoomId) => {
+    if (socketRef.current) {
+      socketRef.current.emit("delete_room", { roomId: targetRoomId });
+    }
+    await handleLeaveRoom(targetRoomId);
+  };
+
   const handleUnlockRoom = async (targetRoomId, password) => {
     return handleJoinWithCredentials(targetRoomId, password);
   };
@@ -734,6 +749,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               onSwitchRoom={handleSwitchRoom}
               onJoinNewRoom={handleJoinWithCredentials}
               onLeaveRoom={handleLeaveRoom}
+              onDeleteRoomForAll={handleDeleteRoomForAll}
               onUnlockRoom={handleUnlockRoom}
               onUpdateRetentionPeriod={handleUpdateRetentionPeriod}
               onSetRoomName={handleSetRoomName}

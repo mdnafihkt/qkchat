@@ -18,6 +18,7 @@ import {
   Home,
   Tag,
   ShieldAlert,
+  Trash2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage, encryptBinary, decryptBinary } from "../../utils/crypto";
@@ -59,6 +60,7 @@ export default function ChatPage({
   onSwitchRoom,
   onJoinNewRoom,
   onLeaveRoom,
+  onDeleteRoomForAll,
   onUnlockRoom,
   onUpdateRetentionPeriod,
   onSetRoomName,
@@ -712,6 +714,35 @@ export default function ChatPage({
                             <span>Show QR Code</span>
                           </button>
                         </div>
+                      </motion.div>
+
+                      <motion.div
+                        className="settings-section danger-zone-section"
+                        variants={{
+                          hidden: { opacity: 0, x: -15 },
+                          visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+                        }}
+                      >
+                        <h4 className="danger-zone-title">Danger Zone</h4>
+                        <p className="settings-desc">Destructive actions for this room. Deleting the room destroys local data and terminates the room session for all peers.</p>
+                        
+                        <button
+                          type="button"
+                          className="btn-danger-delete"
+                          onClick={() => {
+                            if (window.confirm("Are you sure you want to delete this room for all participants? This will immediately clear room data for everyone.")) {
+                              if (onDeleteRoomForAll) {
+                                onDeleteRoomForAll(activeRoomId);
+                              } else if (onLeaveRoom) {
+                                onLeaveRoom(activeRoomId);
+                              }
+                            }
+                          }}
+                          title="Delete room for all peers"
+                        >
+                          <Trash2 size={16} />
+                          <span>Delete Room for All</span>
+                        </button>
                       </motion.div>
                     </>
                   )}
