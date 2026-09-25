@@ -16,8 +16,8 @@ export default defineConfig({
         name: 'qkchat',
         short_name: 'qkchat',
         description: 'qkchat messaging application',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
+        theme_color: '#050505',
+        background_color: '#050505',
         display: 'standalone',
         icons: [
           {
