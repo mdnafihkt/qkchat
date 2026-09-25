@@ -68,7 +68,6 @@ export default function HomeSelection({
               Qk<span>Chat</span>
             </motion.h1>
           </motion.div>
-
           {/* Compact Header Quick Action Buttons (Fade in when scrolled) */}
           <motion.div
             className="header-pill-actions"
@@ -100,17 +99,7 @@ export default function HomeSelection({
 
       {/* Hero Section Container */}
       <div className="home-hero-container">
-        {/* Animated Tagline */}
-        <motion.p
-          className="hero-tagline"
-          style={{
-            opacity: taglineOpacity,
-            y: taglineY,
-            filter: taglineFilter,
-          }}
-        >
-          End-to-end encrypted, zero-knowledge ephemeral messaging.
-        </motion.p>
+
 
         {/* Primary Action Cards (Full Grid view in spacious layout) */}
         <motion.div

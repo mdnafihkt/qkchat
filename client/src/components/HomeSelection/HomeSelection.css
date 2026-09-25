@@ -86,7 +86,7 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.55rem 0.95rem;
-    border-radius: 100px;
+    border-radius: 8px;
     font-size: 0.825rem;
     font-weight: 600;
     cursor: pointer;
@@ -502,11 +502,11 @@
 .enter-room-text {
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--primary);
 }
 
 .arrow-icon {
-    color: var(--accent);
+    color: var(--primary);
     transition: transform 0.2s ease;
 }
 
