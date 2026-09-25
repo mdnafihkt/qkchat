@@ -1206,5 +1206,71 @@ body,
     flex: 1;
 }
 
+/* Drag & Drop Visual Overlay */
+.chat-container.dragging-over {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.3) !important;
+}
+
+.drag-drop-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 200;
+    background: rgba(5, 5, 10, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    pointer-events: none;
+}
+
+.drag-drop-box {
+    max-width: 440px;
+    width: 90%;
+    padding: 3rem 2rem;
+    border: 2px dashed var(--primary);
+    border-radius: 24px;
+    background: rgba(18, 18, 28, 0.9);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+}
+
+.drag-drop-icon {
+    color: var(--primary);
+    animation: bounce-float 1.8s ease-in-out infinite;
+}
+
+.drag-drop-box h3 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.drag-drop-box p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+}
+
+@keyframes bounce-float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
 
 

@@ -19,6 +19,7 @@ import {
   Tag,
   ShieldAlert,
   Trash2,
+  UploadCloud,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { encryptMessage, encryptBinary, decryptBinary } from "../../utils/crypto";
@@ -86,6 +87,49 @@ export default function ChatPage({
   const [transfers, setTransfers] = useState({});
   const activeTransfersRef = useRef({});
   const navigate = useNavigate();
+
+  // Drag and Drop File Upload State
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer?.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    if (currentRoom?.isLocked || currentRoom?.isRoomFull || !cryptoKey) return;
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach((file) => {
+        processFileSend(file);
+      });
+    }
+  };
 
   const messages = currentRoom?.messages || [];
   const cryptoKey = currentRoom?.cryptoKey || null;
@@ -476,7 +520,13 @@ export default function ChatPage({
   };
 
   return (
-    <div className="glass-panel chat-container">
+    <div
+      className={`glass-panel chat-container ${isDragging ? "dragging-over" : ""}`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Header */}
       <div className="chat-header">
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -1042,6 +1092,24 @@ export default function ChatPage({
           </div>
         </div>
       )}
+      {/* Drag & Drop Visual Overlay */}
+      <AnimatePresence>
+        {isDragging && !currentRoom?.isLocked && !currentRoom?.isRoomFull && cryptoKey && (
+          <motion.div
+            className="drag-drop-overlay"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            <div className="drag-drop-box">
+              <UploadCloud size={64} className="drag-drop-icon" />
+              <h3>Drop Files to Encrypt & Send</h3>
+              <p>Files will be encrypted zero-knowledge and transmitted directly to your peer.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
