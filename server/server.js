@@ -31,6 +31,11 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Fallback endpoint for Web Share Target POST requests if Service Worker is bypassed
+app.post('/share-target', (req, res) => {
+  res.redirect(303, '/share');
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: corsOptions,
