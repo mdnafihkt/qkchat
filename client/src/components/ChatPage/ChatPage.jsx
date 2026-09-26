@@ -796,9 +796,6 @@ export default function ChatPage({
                       </motion.div>
                     </>
                   )}
-                  <div style={{ marginTop: "auto", paddingTop: "1.5rem", fontSize: "0.75rem", color: "var(--text-muted)", opacity: 0.4, fontFamily: "monospace", textAlign: "center" }}>
-                    v{typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0"}
-                  </div>
                 </motion.div>
               </motion.aside>
             </>
