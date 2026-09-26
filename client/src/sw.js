@@ -48,8 +48,19 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       (async () => {
         try {
-          const formData = await event.request.formData();
-          console.log("[SW] Received FormData keys:", Array.from(formData.keys()));
+          // Clone request to avoid stream consumption issues
+          const reqClone = event.request.clone();
+          let formData;
+
+          try {
+            formData = await event.request.formData();
+          } catch (e) {
+            console.warn("[SW] Primary formData() failed, attempting reqClone.formData()...", e);
+            formData = await reqClone.formData();
+          }
+
+          const keys = Array.from(formData.keys());
+          console.log("[SW] Received FormData keys:", keys);
 
           const title = formData.get("title") || "";
           const text = formData.get("text") || "";
@@ -57,7 +68,7 @@ self.addEventListener("fetch", (event) => {
           
           let files = [];
 
-          // Log all entries for debugging on device
+          // Parse all entries across keys
           for (const [key, value] of formData.entries()) {
             console.log(`[SW] FormData entry: key="${key}", type=${typeof value}, isFile=${value instanceof File}`);
             if (value instanceof File) {
@@ -68,6 +79,14 @@ self.addEventListener("fetch", (event) => {
             }
           }
 
+          // If no files found under instanceof File, try direct form file key lookup
+          if (files.length === 0) {
+            const fileDirect = formData.get("file");
+            if (fileDirect && typeof fileDirect === "object" && fileDirect.size > 0) {
+              files.push(fileDirect);
+            }
+          }
+
           let fileBlob = null;
           let fileName = "";
           let fileType = "";
@@ -75,7 +94,7 @@ self.addEventListener("fetch", (event) => {
           if (files.length > 0) {
             fileBlob = files[0];
             fileName = files[0].name || "shared_media";
-            fileType = files[0].type || "application/octet-stream";
+            fileType = files[0].type || "image/jpeg";
             console.log("[SW] Selected file for sharing:", fileName, fileType, fileBlob.size);
           } else {
             console.warn("[SW] No File objects found in POST /share-target formData!");
