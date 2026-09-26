@@ -10,7 +10,7 @@ app.use(helmet());
 // Configure Allowed Origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['https://qkchat.daimens.com', 'http://localhost:5173', 'http://localhost:3000'];
+  : ['https://qkchat.daimens.com', 'http://localhost:5173', 'http://localhost:3000', 'https://qkchat-test.netlify.app/'];
 
 const corsOptions = {
   origin: (origin, callback) => {

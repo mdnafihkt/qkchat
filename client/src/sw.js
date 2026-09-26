@@ -44,28 +44,25 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   if (event.request.method === "POST" && url.pathname === "/share-target") {
+    console.log("[SW] Intercepted POST /share-target request!");
     event.respondWith(
       (async () => {
         try {
           const formData = await event.request.formData();
+          console.log("[SW] Received FormData keys:", Array.from(formData.keys()));
+
           const title = formData.get("title") || "";
           const text = formData.get("text") || "";
           const sharedUrl = formData.get("url") || "";
           
-          // Check for files across all possible key names used by various Android/iOS share target implementations
           let files = [];
-          const possibleKeys = ["file", "image", "files", "images", "media"];
-          for (const key of possibleKeys) {
-            const extracted = formData.getAll(key);
-            if (extracted && extracted.length > 0) {
-              files = files.concat(extracted.filter(item => item instanceof File && item.size > 0));
-            }
-          }
 
-          // If no files found via key search, iterate all formData entries
-          if (files.length === 0) {
-            for (const [key, value] of formData.entries()) {
-              if (value instanceof File && value.size > 0) {
+          // Log all entries for debugging on device
+          for (const [key, value] of formData.entries()) {
+            console.log(`[SW] FormData entry: key="${key}", type=${typeof value}, isFile=${value instanceof File}`);
+            if (value instanceof File) {
+              console.log(`[SW] File details: name="${value.name}", size=${value.size}, type="${value.type}"`);
+              if (value.size > 0) {
                 files.push(value);
               }
             }
@@ -79,9 +76,12 @@ self.addEventListener("fetch", (event) => {
             fileBlob = files[0];
             fileName = files[0].name || "shared_media";
             fileType = files[0].type || "application/octet-stream";
+            console.log("[SW] Selected file for sharing:", fileName, fileType, fileBlob.size);
+          } else {
+            console.warn("[SW] No File objects found in POST /share-target formData!");
           }
 
-          await saveSharedPayloadInSW({
+          const saveResult = await saveSharedPayloadInSW({
             title,
             text,
             url: sharedUrl,
@@ -90,9 +90,10 @@ self.addEventListener("fetch", (event) => {
             fileType,
           });
 
+          console.log("[SW] saveSharedPayloadInSW result:", saveResult);
           return Response.redirect("/share", 303);
         } catch (err) {
-          console.error("Failed to handle Web Share Target POST:", err);
+          console.error("[SW] Failed to handle Web Share Target POST:", err);
           return Response.redirect("/share", 303);
         }
       })()

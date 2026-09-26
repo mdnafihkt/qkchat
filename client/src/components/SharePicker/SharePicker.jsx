@@ -21,10 +21,12 @@ export default function SharePicker({ rooms = {}, onSelectRoomForShare }) {
   useEffect(() => {
     async function loadPayload() {
       try {
+        console.log("[SharePicker] Loading shared payload from IndexedDB...");
         const payload = await getSharedPayload();
+        console.log("[SharePicker] Retreived payload from IndexedDB:", payload);
         setSharedPayload(payload);
       } catch (err) {
-        console.error("Failed to load shared payload:", err);
+        console.error("[SharePicker] Failed to load shared payload:", err);
       } finally {
         setIsLoading(false);
       }
