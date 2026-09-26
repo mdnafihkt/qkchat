@@ -220,6 +220,11 @@ export default function HomeSelection({
           </div>
         )}
       </div>
+
+      {/* Subtle Version Footer */}
+      <div className="home-version-tag">
+        v{typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0"}
+      </div>
     </div>
   );
 }

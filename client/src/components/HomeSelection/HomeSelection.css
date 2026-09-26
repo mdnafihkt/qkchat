@@ -513,3 +513,19 @@
 .room-card:hover .arrow-icon {
     transform: translateX(4px);
 }
+
+/* Subtle Version Tag */
+.home-version-tag {
+    margin-top: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    opacity: 0.4;
+    font-family: monospace;
+    letter-spacing: 0.05em;
+    user-select: none;
+    transition: opacity 0.2s ease;
+}
+
+.home-version-tag:hover {
+    opacity: 0.8;
+}

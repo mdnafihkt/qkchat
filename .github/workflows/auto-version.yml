@@ -1,0 +1,45 @@
+name: Auto Version Bump & Release CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    # Prevent infinite loop if commit was created by github-actions bot
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Configure Git User
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump Version in client/package.json
+        run: |
+          cd client
+          # Auto patch bump version (e.g., 1.0.0 -> 1.0.1)
+          npm version patch --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Commit & Push Version Bump
+        run: |
+          git add client/package.json client/package-lock.json
+          git commit -m "chore(release): bump version to v${{ env.NEW_VERSION }} [skip ci]"
+          git push origin main
