@@ -111,6 +111,12 @@
     background: rgba(255, 255, 255, 0.15);
 }
 
+.version-tag{
+    color:rgba(72, 71, 71);
+    font-style:italic;
+    align-self:flex-end;
+    padding-bottom:0.5rem;
+}
 @media (max-width: 480px) {
     .sticky-header-bar {
         padding: 0.65rem 0.85rem;
