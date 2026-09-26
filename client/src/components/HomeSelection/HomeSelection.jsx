@@ -68,7 +68,7 @@ export default function HomeSelection({
               Qk<span>Chat</span>
             </motion.h1>
             <p className="version-tag">
-              v2.0.0
+              v2.0.1
             </p>
           </motion.div>
           {/* Compact Header Quick Action Buttons (Fade in when scrolled) */}
