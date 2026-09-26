@@ -53,6 +53,22 @@ export default defineConfig({
               {
                 name: 'file',
                 accept: ['*/*']
+              },
+              {
+                name: 'image',
+                accept: ['image/*']
+              },
+              {
+                name: 'files',
+                accept: ['*/*']
+              },
+              {
+                name: 'images',
+                accept: ['image/*']
+              },
+              {
+                name: 'media',
+                accept: ['*/*']
               }
             ]
           }

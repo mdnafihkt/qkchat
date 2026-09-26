@@ -51,16 +51,34 @@ self.addEventListener("fetch", (event) => {
           const title = formData.get("title") || "";
           const text = formData.get("text") || "";
           const sharedUrl = formData.get("url") || "";
-          const files = formData.getAll("file");
+          
+          // Check for files across all possible key names used by various Android/iOS share target implementations
+          let files = [];
+          const possibleKeys = ["file", "image", "files", "images", "media"];
+          for (const key of possibleKeys) {
+            const extracted = formData.getAll(key);
+            if (extracted && extracted.length > 0) {
+              files = files.concat(extracted.filter(item => item instanceof File && item.size > 0));
+            }
+          }
+
+          // If no files found via key search, iterate all formData entries
+          if (files.length === 0) {
+            for (const [key, value] of formData.entries()) {
+              if (value instanceof File && value.size > 0) {
+                files.push(value);
+              }
+            }
+          }
 
           let fileBlob = null;
           let fileName = "";
           let fileType = "";
 
-          if (files && files.length > 0 && files[0] instanceof File && files[0].size > 0) {
+          if (files.length > 0) {
             fileBlob = files[0];
-            fileName = files[0].name;
-            fileType = files[0].type;
+            fileName = files[0].name || "shared_media";
+            fileType = files[0].type || "application/octet-stream";
           }
 
           await saveSharedPayloadInSW({
