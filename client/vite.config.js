@@ -36,39 +36,7 @@ export default defineConfig({
             type: 'image/webp',
             purpose: 'any maskable'
           }
-        ],
-        share_target: {
-          action: '/share-target',
-          method: 'POST',
-          enctype: 'multipart/form-data',
-          params: {
-            title: 'title',
-            text: 'text',
-            url: 'url',
-            files: [
-              {
-                name: 'file',
-                accept: ['*/*']
-              },
-              {
-                name: 'image',
-                accept: ['image/*']
-              },
-              {
-                name: 'files',
-                accept: ['*/*']
-              },
-              {
-                name: 'images',
-                accept: ['image/*']
-              },
-              {
-                name: 'media',
-                accept: ['*/*']
-              }
-            ]
-          }
-        }
+        ]
       }
     })
   ],

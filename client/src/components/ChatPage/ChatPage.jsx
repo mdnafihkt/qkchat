@@ -55,8 +55,6 @@ export default function ChatPage({
   rooms = {},
   activeRoomId = "",
   currentRoom = null,
-  pendingSharedItem = null,
-  onClearPendingSharedItem = () => {},
   setRooms,
   onSwitchRoom,
   onJoinNewRoom,
@@ -494,24 +492,6 @@ export default function ChatPage({
     e.target.value = null;
   };
 
-  // Process incoming shared payload from Web Share Target API
-  useEffect(() => {
-    if (
-      pendingSharedItem &&
-      pendingSharedItem.roomId === activeRoomId &&
-      cryptoKey &&
-      !isLocked
-    ) {
-      const { payload } = pendingSharedItem;
-      if (payload?.fileBlob) {
-        processFileSend(payload.fileBlob);
-      } else if (payload?.text || payload?.url) {
-        const sharedText = payload.text || payload.url;
-        setNewMessage(sharedText);
-      }
-      onClearPendingSharedItem();
-    }
-  }, [activeRoomId, pendingSharedItem, cryptoKey, isLocked]);
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);

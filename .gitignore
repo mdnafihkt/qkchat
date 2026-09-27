@@ -161,3 +161,7 @@ android/local.properties
 android/app/build/
 *.keystore
 *.jks
+
+node_modules
+dist
+.vite

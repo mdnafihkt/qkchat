@@ -24,9 +24,6 @@ export function initDB() {
         store.createIndex("roomId", "roomId", { unique: false });
         store.createIndex("messageId", "messageId", { unique: true });
       }
-      if (!db.objectStoreNames.contains("shared_payload")) {
-        db.createObjectStore("shared_payload", { keyPath: "id" });
-      }
     };
   });
 }
@@ -219,38 +216,4 @@ export async function clearAllRoomsExcept(activeRoomId) {
   });
 }
 
-// Shared Payload Store (for Web Share Target API)
-export async function saveSharedPayload(payload) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(["shared_payload"], "readwrite");
-    const store = transaction.objectStore("shared_payload");
-    const record = { id: "latest", ...payload, timestamp: Date.now() };
-    const request = store.put(record);
-    request.onsuccess = () => resolve(true);
-    request.onerror = (event) => reject(event.target.error);
-  });
-}
-
-export async function getSharedPayload() {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(["shared_payload"], "readonly");
-    const store = transaction.objectStore("shared_payload");
-    const request = store.get("latest");
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = (event) => reject(event.target.error);
-  });
-}
-
-export async function clearSharedPayload() {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(["shared_payload"], "readwrite");
-    const store = transaction.objectStore("shared_payload");
-    const request = store.delete("latest");
-    request.onsuccess = () => resolve(true);
-    request.onerror = (event) => reject(event.target.error);
-  });
-}
 
