@@ -116,7 +116,7 @@ export default function HomeSelection({
               Qk<span>Chat</span>
             </h1>
 
-            <p className="version-tag">v2.0.0</p>
+            <p className="version-tag">v2.1.1</p>
           </Motion.div>
         </div>
 
