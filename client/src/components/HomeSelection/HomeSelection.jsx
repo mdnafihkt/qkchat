@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion as Motion, useScroll, useTransform } from "framer-motion";
 import { PlusCircle, LogIn, Lock, ChevronRight, LogOut, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./HomeSelection.css";
@@ -14,136 +14,233 @@ export default function HomeSelection({
   const roomList = Object.values(rooms);
   const containerRef = useRef(null);
 
-  // Scroll Progress (0 to 1 over first ~160px scroll distance)
+  // Scroll Progress over first ~140px scroll distance
   const { scrollYProgress } = useScroll({
     container: containerRef,
-    offset: ["start start", "160px start"],
+    offset: ["start start", "240px start"],
   });
 
-  // Hero Logo & Title transforms (Large Hero state -> Compact Header state)
-  const logoScale = useTransform(scrollYProgress, [0, 1], [1, 0.45]);
-  const logoY = useTransform(scrollYProgress, [0, 1], [0, -4]);
-  
-  // Tagline transforms (Fade out with slight upward shift & blur)
-  const taglineOpacity = useTransform(scrollYProgress, [0, 0.65], [1, 0]);
-  const taglineY = useTransform(scrollYProgress, [0, 0.65], [0, -18]);
-  const taglineFilter = useTransform(scrollYProgress, [0, 0.65], ["blur(0px)", "blur(6px)"]);
+  // Sticky Compact Header background, border & shadow
+  const headerBg = useTransform(
+    scrollYProgress,
+    [0, 0.8],
+    ["rgba(10, 10, 15, 0)", "rgba(10, 10, 15, 0.85)"]
+  );
+  const headerBorder = useTransform(
+    scrollYProgress,
+    [0, 0.8],
+    ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.08)"]
+  );
+  const headerShadow = useTransform(
+    scrollYProgress,
+    [0, 0.8],
+    ["0 0px 0px rgba(0, 0, 0, 0)", "0 10px 30px -10px rgba(0, 0, 0, 0.5)"]
+  );
 
-  // Action Cards transforms (Full cards in Hero -> Compact Pills in Sticky Header)
-  const cardScale = useTransform(scrollYProgress, [0, 1], [1, 0.92]);
-  const cardPillOpacity = useTransform(scrollYProgress, [0.3, 1], [0, 1]);
-  const fullCardContentOpacity = useTransform(scrollYProgress, [0, 0.45], [1, 0]);
-  
-  // Sticky Compact Header background backdrop & shadow opacity
-  const headerBgOpacity = useTransform(scrollYProgress, [0.4, 1], [0, 0.85]);
-  const headerBorderOpacity = useTransform(scrollYProgress, [0.4, 1], [0, 1]);
-  const headerShadowOpacity = useTransform(scrollYProgress, [0.4, 1], [0, 0.5]);
+  // Logo Brand Transforms (scale down to ~0.74, anchored to left center)
+  const logoScale = useTransform(scrollYProgress, [0, 1], [1, 0.74]);
+  const logoY = useTransform(scrollYProgress, [0, 1], [0, -2]);
+
+  // Collapsing Hero Container
+  const heroHeight = useTransform(scrollYProgress, [0, 1], [195, 60]);
+  const cardScale = useTransform(scrollYProgress, [0, 1], [1, 0.98]);
+
+  // Card Structure & Dimensions
+  const cardRadius = useTransform(scrollYProgress, [0, 1], [22, 14]);
+  const cardPaddingY = useTransform(scrollYProgress, [0, 1], [20, 8]);
+  const cardPaddingX = useTransform(scrollYProgress, [0, 1], [20, 14]);
+
+  // Card Layout (smoothly transitions between centered stack and horizontal pill)
+  const cardFlexDirection = useTransform(
+    scrollYProgress,
+    [0, 0.35, 0.36, 1],
+    ["column", "column", "row", "row"]
+  );
+  const cardJustify = useTransform(
+    scrollYProgress,
+    [0, 0.35, 0.36, 1],
+    ["center", "center", "flex-start", "flex-start"]
+  );
+  const cardTextAlign = useTransform(
+    scrollYProgress,
+    [0, 0.35, 0.36, 1],
+    ["center", "center", "left", "left"]
+  );
+
+  // Card Icon Transforms
+  const iconWrapperSize = useTransform(scrollYProgress, [0, 1], [52, 34]);
+  const iconMarginBottom = useTransform(
+    scrollYProgress,
+    [0, 0.35, 0.36, 1],
+    [12, 0, 0, 0]
+  );
+  const iconMarginRight = useTransform(
+    scrollYProgress,
+    [0, 0.35, 0.36, 1],
+    [0, 0, 10, 10]
+  );
+
+  // Card Text Transforms
+  const titleScale = useTransform(scrollYProgress, [0, 1], [1, 0.9]);
+  const descOpacity = useTransform(scrollYProgress, [0, 0.32], [1, 0]);
+  const descHeight = useTransform(scrollYProgress, [0, 0.32], [42, 0]);
+  const descMarginTop = useTransform(scrollYProgress, [0, 0.32], [6, 0]);
 
   return (
     <div className="home-scroll-viewport" ref={containerRef}>
-      {/* Sticky Collapsing Dynamic Header Bar */}
-      <motion.div
+      {/* Sticky Header Bar containing Brand and Collapsing Action Pills */}
+      <Motion.div
         className="sticky-header-bar"
         style={{
-          backgroundColor: useTransform(headerBgOpacity, (v) => `rgba(10, 10, 15, ${v})`),
-          borderColor: useTransform(headerBorderOpacity, (v) => `rgba(255, 255, 255, ${v * 0.1})`),
-          boxShadow: useTransform(headerShadowOpacity, (v) => `0 10px 30px -10px rgba(0, 0, 0, ${v})`),
+          backgroundColor: headerBg,
+          borderColor: headerBorder,
+          boxShadow: headerShadow,
         }}
       >
+        {/* Brand Group */}
         <div className="sticky-header-content">
-          <motion.div
+          <Motion.div
             className="brand-logo-group"
-            onClick={() => containerRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+            onClick={() =>
+              containerRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+            }
+            style={{
+              scale: logoScale,
+              y: logoY,
+              transformOrigin: "left center",
+            }}
           >
-            <motion.img
-              src="/qkchat.png"
-              className="logo-img"
-              alt="QkChat Logo"
-              style={{ scale: logoScale, y: logoY }}
-            />
-            <motion.h1
-              className="brand-title"
-              style={{ scale: logoScale, transformOrigin: "left center" }}
-            >
+            <img src="/qkchat.png" className="logo-img" alt="QkChat Logo" />
+
+            <h1 className="brand-title">
               Qk<span>Chat</span>
-            </motion.h1>
-            <p className="version-tag">
-              v2.0.0
-            </p>
-          </motion.div>
-          {/* Compact Header Quick Action Buttons (Fade in when scrolled) */}
-          <motion.div
-            className="header-pill-actions"
-            style={{ opacity: cardPillOpacity }}
-          >
-            <motion.button
-              type="button"
-              className="pill-btn primary-pill"
-              onClick={() => navigate("/start")}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-            >
-              <PlusCircle size={16} />
-              <span>Start Chat</span>
-            </motion.button>
-            <motion.button
-              type="button"
-              className="pill-btn secondary-pill"
-              onClick={() => navigate("/join")}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-            >
-              <LogIn size={16} />
-              <span>Join Chat</span>
-            </motion.button>
-          </motion.div>
+            </h1>
+
+            <p className="version-tag">v2.0.0</p>
+          </Motion.div>
         </div>
-      </motion.div>
 
-      {/* Hero Section Container */}
-      <div className="home-hero-container">
-
-
-        {/* Primary Action Cards (Full Grid view in spacious layout) */}
-        <motion.div
-          className="cards-grid"
-          style={{ scale: cardScale }}
+        {/* Collapsing Hero Container */}
+        <Motion.div
+          className="home-hero-container"
+          style={{
+            height: heroHeight,
+          }}
         >
-          <motion.div
-            className="action-card primary-card"
-            onClick={() => navigate("/start")}
-            whileHover={{ y: -6, scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          <Motion.div
+            className="cards-grid"
+            style={{
+              scale: cardScale,
+            }}
           >
-            <div className="card-icon-wrapper">
-              <PlusCircle className="responsive-icon" />
-            </div>
-            <h2>Start New Chat</h2>
-            <motion.p style={{ opacity: fullCardContentOpacity }}>
-              Generate a secure room and get a QR code to invite your peer.
-            </motion.p>
-          </motion.div>
+            {/* Start Chat Action Card */}
+            <Motion.div
+              className="action-card primary-card"
+              onClick={() => navigate("/start")}
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                borderRadius: cardRadius,
+                paddingTop: cardPaddingY,
+                paddingBottom: cardPaddingY,
+                paddingLeft: cardPaddingX,
+                paddingRight: cardPaddingX,
+                flexDirection: cardFlexDirection,
+                justifyContent: cardJustify,
+                textAlign: cardTextAlign,
+              }}
+            >
+              <Motion.div
+                className="card-icon-wrapper"
+                style={{
+                  width: iconWrapperSize,
+                  height: iconWrapperSize,
+                  minWidth: iconWrapperSize,
+                  minHeight: iconWrapperSize,
+                  marginBottom: iconMarginBottom,
+                  marginRight: iconMarginRight,
+                }}
+              >
+                <PlusCircle className="responsive-icon" />
+              </Motion.div>
 
-          <motion.div
-            className="action-card secondary-card"
-            onClick={() => navigate("/join")}
-            whileHover={{ y: -6, scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          >
-            <div className="card-icon-wrapper">
-              <LogIn className="responsive-icon" />
-            </div>
-            <h2>Join a Chat</h2>
-            <motion.p style={{ opacity: fullCardContentOpacity }}>
-              Enter an existing Chat ID or scan a QR code from your peer.
-            </motion.p>
-          </motion.div>
-        </motion.div>
-      </div>
+              <div className="card-text-container">
+                <Motion.h2 style={{ scale: titleScale, transformOrigin: "left center" }}>
+                  Start New Chat
+                </Motion.h2>
 
-      {/* Active Rooms UX (Smooth Motion Cards List) */}
+                <Motion.div
+                  className="card-desc-wrapper"
+                  style={{
+                    opacity: descOpacity,
+                    height: descHeight,
+                    marginTop: descMarginTop,
+                    overflow: "hidden",
+                  }}
+                >
+                  <p>
+                    Generate a secure room and get a QR code to invite your peer.
+                  </p>
+                </Motion.div>
+              </div>
+            </Motion.div>
+
+            {/* Join Chat Action Card */}
+            <Motion.div
+              className="action-card secondary-card"
+              onClick={() => navigate("/join")}
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                borderRadius: cardRadius,
+                paddingTop: cardPaddingY,
+                paddingBottom: cardPaddingY,
+                paddingLeft: cardPaddingX,
+                paddingRight: cardPaddingX,
+                flexDirection: cardFlexDirection,
+                justifyContent: cardJustify,
+                textAlign: cardTextAlign,
+              }}
+            >
+              <Motion.div
+                className="card-icon-wrapper"
+                style={{
+                  width: iconWrapperSize,
+                  height: iconWrapperSize,
+                  minWidth: iconWrapperSize,
+                  minHeight: iconWrapperSize,
+                  marginBottom: iconMarginBottom,
+                  marginRight: iconMarginRight,
+                }}
+              >
+                <LogIn className="responsive-icon" />
+              </Motion.div>
+
+              <div className="card-text-container">
+                <Motion.h2 style={{ scale: titleScale, transformOrigin: "left center" }}>
+                  Join a Chat
+                </Motion.h2>
+
+                <Motion.div
+                  className="card-desc-wrapper"
+                  style={{
+                    opacity: descOpacity,
+                    height: descHeight,
+                    marginTop: descMarginTop,
+                    overflow: "hidden",
+                  }}
+                >
+                  <p>
+                    Enter an existing Chat ID or scan a QR code from your peer.
+                  </p>
+                </Motion.div>
+              </div>
+            </Motion.div>
+          </Motion.div>
+        </Motion.div>
+      </Motion.div>
+
+      {/* Active Rooms List */}
       <div className="joined-rooms-section">
         <div className="section-header">
           <h3>
@@ -152,7 +249,7 @@ export default function HomeSelection({
         </div>
 
         {roomList.length === 0 ? (
-          <motion.div
+          <Motion.div
             className="empty-rooms-state"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -161,14 +258,20 @@ export default function HomeSelection({
             <MessageSquare size={36} className="empty-icon" />
             <p className="empty-title">No Active Chat Rooms</p>
             <p className="empty-subtitle">Start a new room or join an existing session to begin chatting securely.</p>
-          </motion.div>
+          </Motion.div>
         ) : (
           <div className="joined-rooms-grid">
             {roomList.map((room, index) => (
-              <motion.div
+              <Motion.div
                 key={room.roomId}
                 className={`room-card ${room.isLocked ? "locked" : ""}`}
-                onClick={() => onSelectRoom(room.roomId)}
+                onClick={() => {
+                  if (room.isLocked && onUnlockRoom) {
+                    onUnlockRoom(room.roomId);
+                  } else {
+                    onSelectRoom(room.roomId);
+                  }
+                }}
                 initial={{ opacity: 0, y: 20, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.94 }}
@@ -218,7 +321,7 @@ export default function HomeSelection({
                   <span className="enter-room-text">Enter Chat</span>
                   <ChevronRight size={16} className="arrow-icon" />
                 </div>
-              </motion.div>
+              </Motion.div>
             ))}
           </div>
         )}

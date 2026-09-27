@@ -248,13 +248,13 @@ button.icon-btn:hover {
   background: #7f1d1d;
   color: #fecaca;
   padding: 0.75rem 1.5rem;
-  border-radius: 100px;
+  border-radius: 8px;
   font-size: 0.9rem;
   display: flex;
   align-items: center;
   gap: 1rem;
   animation: slide-down 0.3s ease;
-  z-index: 50;
+  z-index: 99;
   border: 1px solid #991b1b;
 }
 
