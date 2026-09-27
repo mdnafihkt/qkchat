@@ -191,6 +191,48 @@ export default function AppRoutes({ SOCKET_URL }) {
     }
   };
 
+  // Leave / Close a specific Room
+  const handleLeaveRoom = async (targetRoomId) => {
+    const peerId = getOrCreateRoomPeerId(targetRoomId);
+    if (socketRef.current) {
+      socketRef.current.emit("leave_room", { roomId: targetRoomId, peerId, clearSlot: true });
+    }
+
+    await clearRoomMessages(targetRoomId).catch((err) => {
+      console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
+    });
+
+    removeStoredRoomKey(targetRoomId);
+    removeRoomPeerId(targetRoomId);
+    setStoredRoomName(targetRoomId, "");
+    const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
+    setStoredActiveRooms(updatedList);
+
+    setRooms((prev) => {
+      const next = { ...prev };
+      delete next[targetRoomId];
+      return next;
+    });
+
+    if (activeRoomIdRef.current === targetRoomId) {
+      if (updatedList.length > 0) {
+        setActiveRoomId(updatedList[0]);
+      } else {
+        setActiveRoomId("");
+        navigate("/");
+      }
+    }
+  };
+
+  // Delete Room for ALL peers in the room
+  const handleDeleteRoomForAll = async (targetRoomId) => {
+    if (socketRef.current) {
+      socketRef.current.emit("delete_room", { roomId: targetRoomId });
+    }
+    await handleLeaveRoom(targetRoomId);
+    navigate("/");
+  };
+
   // Socket setup
   const initSocketIfNeeded = () => {
     if (socketRef.current) return socketRef.current;
@@ -448,7 +490,18 @@ export default function AppRoutes({ SOCKET_URL }) {
     newSocket.on("room_deleted", async (data) => {
       const rId = typeof data === "object" ? data.roomId : data;
       if (rId) {
+        if (
+          data &&
+          typeof data === "object" &&
+          data.deletedBy &&
+          socketRef.current &&
+          data.deletedBy === socketRef.current.id
+        ) {
+          navigate("/");
+          return;
+        }
         await handleLeaveRoom(rId);
+        navigate("/");
       }
     });
 
@@ -630,47 +683,6 @@ export default function AppRoutes({ SOCKET_URL }) {
         },
       };
     });
-  };
-
-  // Leave / Close a specific Room
-  const handleLeaveRoom = async (targetRoomId) => {
-    const peerId = getOrCreateRoomPeerId(targetRoomId);
-    if (socketRef.current) {
-      socketRef.current.emit("leave_room", { roomId: targetRoomId, peerId, clearSlot: true });
-    }
-
-    await clearRoomMessages(targetRoomId).catch((err) => {
-      console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
-    });
-
-    removeStoredRoomKey(targetRoomId);
-    removeRoomPeerId(targetRoomId);
-    setStoredRoomName(targetRoomId, "");
-    const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
-    setStoredActiveRooms(updatedList);
-
-    setRooms((prev) => {
-      const next = { ...prev };
-      delete next[targetRoomId];
-      return next;
-    });
-
-    if (activeRoomId === targetRoomId) {
-      if (updatedList.length > 0) {
-        setActiveRoomId(updatedList[0]);
-      } else {
-        setActiveRoomId("");
-        navigate("/");
-      }
-    }
-  };
-
-  // Delete Room for ALL peers in the room
-  const handleDeleteRoomForAll = async (targetRoomId) => {
-    if (socketRef.current) {
-      socketRef.current.emit("delete_room", { roomId: targetRoomId });
-    }
-    await handleLeaveRoom(targetRoomId);
   };
 
   const handleUnlockRoom = async (targetRoomId, password) => {
