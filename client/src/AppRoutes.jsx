@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import io from "socket.io-client";
 import { AlertCircle, X } from "lucide-react";
-import { deriveKey, generateRandomSalt, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
+import { deriveKey, generateRandomSalt, decryptMessage } from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
@@ -77,32 +77,6 @@ export default function AppRoutes({ SOCKET_URL }) {
     } else {
       localStorage.removeItem("room_id");
     }
-  };
-
-  const getStoredRoomKeys = () => {
-    try {
-      const stored = sessionStorage.getItem("qkchat_room_keys");
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    const legacyKey = sessionStorage.getItem("chat_key");
-    const legacyRoom = localStorage.getItem("room_id");
-    if (legacyKey && legacyRoom) {
-      return { [legacyRoom]: legacyKey };
-    }
-    return {};
-  };
-
-  const setStoredRoomKey = (rId, jwkString) => {
-    const keysMap = getStoredRoomKeys();
-    keysMap[rId] = jwkString;
-    sessionStorage.setItem("qkchat_room_keys", JSON.stringify(keysMap));
-    sessionStorage.setItem("chat_key", jwkString);
-  };
-
-  const removeStoredRoomKey = (rId) => {
-    const keysMap = getStoredRoomKeys();
-    delete keysMap[rId];
-    sessionStorage.setItem("qkchat_room_keys", JSON.stringify(keysMap));
   };
 
   const getStoredRoomNames = () => {
@@ -195,10 +169,17 @@ export default function AppRoutes({ SOCKET_URL }) {
           });
         }
       }
+      if (records.length > 0) {
+        const hasFailedMessages = decryptedMessages.some((m) => m.text === "[Encrypted message - Failed to decrypt]");
+        const hasSuccessfulMessages = decryptedMessages.some((m) => m.text !== "[Encrypted message - Failed to decrypt]");
+        if (hasFailedMessages && !hasSuccessfulMessages) {
+          throw new Error("Invalid password: Failed to decrypt messages");
+        }
+      }
       return decryptedMessages;
     } catch (err) {
       console.error(`Failed to load messages for room ${targetRoomId}:`, err);
-      return [];
+      throw err;
     }
   };
 
@@ -230,7 +211,6 @@ export default function AppRoutes({ SOCKET_URL }) {
       console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
     });
 
-    removeStoredRoomKey(targetRoomId);
     removeStoredRoomSalt(targetRoomId);
     removeRoomPeerId(targetRoomId);
     setStoredRoomName(targetRoomId, "");
@@ -540,8 +520,9 @@ export default function AppRoutes({ SOCKET_URL }) {
   // Initialize active rooms on mount
   useEffect(() => {
     const initializeRooms = async () => {
+      sessionStorage.removeItem("qkchat_room_keys");
+      sessionStorage.removeItem("chat_key");
       const activeRoomIds = getStoredActiveRooms();
-      const storedKeysMap = getStoredRoomKeys();
       const storedNamesMap = getStoredRoomNames();
       const storedSaltsMap = getStoredRoomSalts();
       const loadedRooms = {};
@@ -550,36 +531,20 @@ export default function AppRoutes({ SOCKET_URL }) {
         const activeSock = initSocketIfNeeded();
 
         for (const rId of activeRoomIds) {
-          const jwkStr = storedKeysMap[rId];
           const salt = storedSaltsMap[rId] || null;
-          let key = null;
-          let isLocked = true;
-          let roomMsgs = [];
-
-          if (jwkStr) {
-            try {
-              key = await importKeyFromJWK(jwkStr);
-              isLocked = false;
-              roomMsgs = await loadMessagesFromLedger(rId, key);
-              const peerId = getOrCreateRoomPeerId(rId);
-              activeSock.emit("join_room", { roomId: rId, peerId, salt });
-              autoSync(activeSock, rId);
-            } catch (err) {
-              console.warn(`Failed to import key for room ${rId}:`, err);
-              isLocked = true;
-            }
-          }
+          const peerId = getOrCreateRoomPeerId(rId);
+          activeSock.emit("join_room", { roomId: rId, peerId, salt });
 
           loadedRooms[rId] = {
             roomId: rId,
             roomName: storedNamesMap[rId] || "",
-            cryptoKey: key,
+            cryptoKey: null,
             salt,
-            messages: roomMsgs,
+            messages: [],
             isConnected: activeSock.connected,
             unreadCount: 0,
             retentionPeriod: parseInt(localStorage.getItem(`qkchat_retention_${rId}`) || "86400000"),
-            isLocked,
+            isLocked: true,
           };
         }
 
@@ -650,14 +615,6 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       setStoredRoomSalt(joinRoomId, salt);
       const key = await deriveKey(joinPassword, salt);
-
-      // Save key in sessionStorage
-      try {
-        const jwk = await exportKeyToJWK(key);
-        setStoredRoomKey(joinRoomId, jwk);
-      } catch (err) {
-        console.warn("Unable to persist key to sessionStorage:", err);
-      }
 
       // Store custom room name if provided
       if (joinRoomName && joinRoomName.trim()) {

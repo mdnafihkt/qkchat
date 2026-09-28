@@ -17,10 +17,10 @@
 
 ## F-02 — Non-Extractable Encryption Keys
 
-- [ ] Create `CryptoKey` objects with `extractable: false`.
-- [ ] Remove all JWK export/import logic.
-- [ ] Remove encryption key storage from `sessionStorage`.
-- [ ] Re-derive keys during Session Recovery using password + room salt.
+- [x] Create `CryptoKey` objects with `extractable: false`.
+- [x] Remove all JWK export/import logic.
+- [x] Remove encryption key storage from `sessionStorage`.
+- [x] Re-derive keys during Session Recovery using password + room salt.
 
 ---
 

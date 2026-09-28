@@ -33,6 +33,7 @@ export default function SessionRecovery({ roomId, onRecoveryComplete }) {
   const handleClear = () => {
     localStorage.removeItem("room_id");
     sessionStorage.removeItem("chat_key");
+    sessionStorage.removeItem("qkchat_room_keys");
     navigate("/");
   };
 
