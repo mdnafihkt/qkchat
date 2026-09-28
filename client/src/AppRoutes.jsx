@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import io from "socket.io-client";
 import { AlertCircle, X } from "lucide-react";
-import { deriveKey, generateRandomSalt, decryptMessage } from "./utils/crypto";
+import { deriveKey, generateRandomSalt, decryptMessage, decryptBinary } from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
@@ -144,7 +144,25 @@ export default function AppRoutes({ SOCKET_URL }) {
           } catch (err) {
             msgData = { type: "text", text: decryptedText };
           }
-          if (record.fileBlob) {
+          if (record.encryptedFile && key) {
+            try {
+              const decryptedBuf = await decryptBinary(
+                key,
+                record.encryptedFile.encryptedBytes,
+                record.encryptedFile.iv
+              );
+              if (decryptedBuf) {
+                const blob = new Blob([decryptedBuf], {
+                  type: record.encryptedFile.mimeType || msgData.fileType || "application/octet-stream",
+                });
+                msgData.fileData = URL.createObjectURL(blob);
+                msgData.fileName = record.encryptedFile.fileName || msgData.fileName;
+                msgData.fileType = record.encryptedFile.mimeType || msgData.fileType;
+              }
+            } catch (fileErr) {
+              console.error("Failed to decrypt stored file:", fileErr);
+            }
+          } else if (record.fileBlob) {
             msgData.fileData = URL.createObjectURL(record.fileBlob);
           }
           decryptedMessages.push({

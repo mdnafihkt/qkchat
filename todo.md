@@ -26,10 +26,10 @@
 
 ## F-03 — Encrypt Files at Rest
 
-- [ ] Stop storing decrypted `Blob`s in IndexedDB.
-- [ ] Store encrypted file ciphertext.
-- [ ] Store IV, MIME type, filename, and encrypted bytes only.
-- [ ] Decrypt files only in volatile memory when viewing or downloading.
+- [x] Stop storing decrypted `Blob`s in IndexedDB.
+- [x] Store encrypted file ciphertext.
+- [x] Store IV, MIME type, filename, and encrypted bytes only.
+- [x] Decrypt files only in volatile memory when viewing or downloading.
 
 ---
 

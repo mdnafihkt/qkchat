@@ -127,13 +127,29 @@ export async function encryptBinary(key, binaryData) {
     return { encryptedData: encryptedBuf, iv: ivBase64 };
 }
 
-// Decrypts an encrypted ArrayBuffer using the base64 encoded iv, returning decrypted ArrayBuffer
+// Decrypts an encrypted ArrayBuffer, Blob, or TypedArray using base64 encoded iv, returning decrypted ArrayBuffer
 export async function decryptBinary(key, encryptedData, ivBase64) {
-    const iv = base64ToArray(ivBase64);
-    const decryptedBuf = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        encryptedData
-    );
-    return decryptedBuf;
+    try {
+        if (!key || !encryptedData || !ivBase64) return null;
+        const iv = base64ToArray(ivBase64);
+        let buffer = encryptedData;
+        if (typeof Blob !== 'undefined' && encryptedData instanceof Blob) {
+            buffer = await encryptedData.arrayBuffer();
+        } else if (ArrayBuffer.isView(encryptedData)) {
+            buffer = encryptedData.buffer.slice(
+                encryptedData.byteOffset,
+                encryptedData.byteOffset + encryptedData.byteLength
+            );
+        }
+        const decryptedBuf = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            buffer
+        );
+        return decryptedBuf;
+    } catch (err) {
+        console.error('Binary decryption failed:', err);
+        return null;
+    }
 }
+

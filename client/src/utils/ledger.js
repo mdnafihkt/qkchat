@@ -109,8 +109,8 @@ export async function updateMessageStatus(messageId, status) {
   });
 }
 
-// Update message fileBlob and status
-export async function updateMessageFileBlob(messageId, fileBlob, status) {
+// Update message encrypted file and status (stores ciphertext bytes, IV, MIME type, filename only)
+export async function updateMessageEncryptedFile(messageId, encryptedFileData, status) {
   const db = await initDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(["messages"], "readwrite");
@@ -121,7 +121,15 @@ export async function updateMessageFileBlob(messageId, fileBlob, status) {
     getRequest.onsuccess = () => {
       const record = getRequest.result;
       if (record) {
-        if (fileBlob) record.fileBlob = fileBlob;
+        if (encryptedFileData) {
+          record.encryptedFile = {
+            encryptedBytes: encryptedFileData.encryptedBytes,
+            iv: encryptedFileData.iv,
+            mimeType: encryptedFileData.mimeType,
+            fileName: encryptedFileData.fileName,
+          };
+          delete record.fileBlob; // Ensure decrypted plaintext Blob is removed
+        }
         if (status) record.status = status;
         const putRequest = store.put(record);
         putRequest.onsuccess = () => resolve(true);

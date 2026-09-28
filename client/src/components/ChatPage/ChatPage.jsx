@@ -8,7 +8,7 @@ import {
 import {
   saveMessage,
   updateMessageStatus,
-  updateMessageFileBlob,
+  updateMessageEncryptedFile,
 } from "../../utils/ledger";
 import ChatHeader from "./ChatHeader";
 import ChatSidebar from "./ChatSidebar";
@@ -147,11 +147,24 @@ export default function ChatPage({
             });
 
             if (transfer.messageId) {
-              await updateMessageFileBlob(
-                transfer.messageId,
-                fileBlob,
-                "delivered"
-              );
+              try {
+                const fileBuffer = await fileBlob.arrayBuffer();
+                const { encryptedData: encryptedBytes, iv: fileIv } =
+                  await encryptBinary(cryptoKey, fileBuffer);
+                await updateMessageEncryptedFile(
+                  transfer.messageId,
+                  {
+                    encryptedBytes,
+                    iv: fileIv,
+                    mimeType: transfer.fileType,
+                    fileName: transfer.fileName,
+                  },
+                  "delivered"
+                );
+              } catch (encErr) {
+                console.error("Failed to encrypt received file for storage:", encErr);
+              }
+
               if (msg && msg.senderId) {
                 socket.emit("message_delivered", {
                   roomId: activeRoomId,
@@ -395,7 +408,21 @@ export default function ChatPage({
         iv: encryptedPayload.iv,
       });
 
-      await updateMessageFileBlob(messageId, file, "sending");
+      const fileBuffer = await file.arrayBuffer();
+      const { encryptedData: encryptedBytes, iv: fileIv } = await encryptBinary(
+        cryptoKey,
+        fileBuffer
+      );
+      await updateMessageEncryptedFile(
+        messageId,
+        {
+          encryptedBytes,
+          iv: fileIv,
+          mimeType: file.type,
+          fileName: file.name,
+        },
+        "sending"
+      );
 
       socket.emit(
         "send_message",
@@ -462,7 +489,6 @@ export default function ChatPage({
             };
           });
           await updateMessageStatus(messageId, "sent");
-          await updateMessageFileBlob(messageId, null, "sent");
           setTransfers((prev) => {
             const next = { ...prev };
             delete next[transferId];
