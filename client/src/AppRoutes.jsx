@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import io from "socket.io-client";
 import { AlertCircle, X } from "lucide-react";
-import { deriveKey, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
+import { deriveKey, generateRandomSalt, decryptMessage, exportKeyToJWK, importKeyFromJWK } from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
@@ -123,6 +123,34 @@ export default function AppRoutes({ SOCKET_URL }) {
     localStorage.setItem("qkchat_room_names", JSON.stringify(namesMap));
   };
 
+  const getStoredRoomSalts = () => {
+    try {
+      const stored = localStorage.getItem("qkchat_room_salts");
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return {};
+  };
+
+  const getStoredRoomSalt = (rId) => {
+    return getStoredRoomSalts()[rId] || null;
+  };
+
+  const setStoredRoomSalt = (rId, salt) => {
+    const salts = getStoredRoomSalts();
+    if (salt) {
+      salts[rId] = salt;
+    } else {
+      delete salts[rId];
+    }
+    localStorage.setItem("qkchat_room_salts", JSON.stringify(salts));
+  };
+
+  const removeStoredRoomSalt = (rId) => {
+    const salts = getStoredRoomSalts();
+    delete salts[rId];
+    localStorage.setItem("qkchat_room_salts", JSON.stringify(salts));
+  };
+
   // Helper to load messages from ledger for a specific room
   const loadMessagesFromLedger = async (targetRoomId, key) => {
     if (!key) return [];
@@ -203,6 +231,7 @@ export default function AppRoutes({ SOCKET_URL }) {
     });
 
     removeStoredRoomKey(targetRoomId);
+    removeStoredRoomSalt(targetRoomId);
     removeRoomPeerId(targetRoomId);
     setStoredRoomName(targetRoomId, "");
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
@@ -514,6 +543,7 @@ export default function AppRoutes({ SOCKET_URL }) {
       const activeRoomIds = getStoredActiveRooms();
       const storedKeysMap = getStoredRoomKeys();
       const storedNamesMap = getStoredRoomNames();
+      const storedSaltsMap = getStoredRoomSalts();
       const loadedRooms = {};
 
       if (activeRoomIds.length > 0) {
@@ -521,6 +551,7 @@ export default function AppRoutes({ SOCKET_URL }) {
 
         for (const rId of activeRoomIds) {
           const jwkStr = storedKeysMap[rId];
+          const salt = storedSaltsMap[rId] || null;
           let key = null;
           let isLocked = true;
           let roomMsgs = [];
@@ -531,7 +562,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               isLocked = false;
               roomMsgs = await loadMessagesFromLedger(rId, key);
               const peerId = getOrCreateRoomPeerId(rId);
-              activeSock.emit("join_room", { roomId: rId, peerId });
+              activeSock.emit("join_room", { roomId: rId, peerId, salt });
               autoSync(activeSock, rId);
             } catch (err) {
               console.warn(`Failed to import key for room ${rId}:`, err);
@@ -543,6 +574,7 @@ export default function AppRoutes({ SOCKET_URL }) {
             roomId: rId,
             roomName: storedNamesMap[rId] || "",
             cryptoKey: key,
+            salt,
             messages: roomMsgs,
             isConnected: activeSock.connected,
             unreadCount: 0,
@@ -591,10 +623,33 @@ export default function AppRoutes({ SOCKET_URL }) {
   }, []);
 
   // Join or Create a Room with Credentials, Custom Name, and optional Retention
-  const handleJoinWithCredentials = async (joinRoomId, joinPassword, joinRoomName = "", joinRetentionPeriod = null) => {
+  const handleJoinWithCredentials = async (
+    joinRoomId,
+    joinPassword,
+    joinRoomName = "",
+    joinRetentionPeriod = null,
+    joinSalt = null
+  ) => {
     try {
       const activeSock = initSocketIfNeeded();
-      const key = await deriveKey(joinPassword, joinRoomId);
+
+      // Resolve room salt: explicitly passed -> stored in metadata -> query server -> generate new
+      let salt = joinSalt || getStoredRoomSalt(joinRoomId);
+      if (!salt && activeSock) {
+        salt = await new Promise((resolve) => {
+          activeSock.emit("get_room_salt", { roomId: joinRoomId }, (res) => {
+            resolve(res && res.success && res.salt ? res.salt : null);
+          });
+          setTimeout(() => resolve(null), 1200);
+        });
+      }
+
+      if (!salt) {
+        salt = generateRandomSalt();
+      }
+
+      setStoredRoomSalt(joinRoomId, salt);
+      const key = await deriveKey(joinPassword, salt);
 
       // Save key in sessionStorage
       try {
@@ -625,7 +680,7 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       // Get or create per-room peer ID and emit join room on socket
       const peerId = getOrCreateRoomPeerId(joinRoomId);
-      activeSock.emit("join_room", { roomId: joinRoomId, peerId });
+      activeSock.emit("join_room", { roomId: joinRoomId, peerId, salt });
       autoSync(activeSock, joinRoomId);
 
       const roomName = getStoredRoomNames()[joinRoomId] || (joinRoomName ? joinRoomName.trim() : "");
@@ -637,6 +692,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           roomId: joinRoomId,
           roomName,
           cryptoKey: key,
+          salt,
           messages: initialMsgs,
           isConnected: activeSock.connected,
           unreadCount: 0,
@@ -729,8 +785,8 @@ export default function AppRoutes({ SOCKET_URL }) {
           path="/start"
           element={
             <StartChat
-              onJoin={async (rId, pwd, name, retention) => {
-                await handleJoinWithCredentials(rId, pwd, name, retention);
+              onJoin={async (rId, pwd, name, retention, salt) => {
+                await handleJoinWithCredentials(rId, pwd, name, retention, salt);
                 navigate("/chat");
               }}
             />
@@ -740,8 +796,8 @@ export default function AppRoutes({ SOCKET_URL }) {
           path="/join"
           element={
             <JoinChat
-              onJoin={async (rId, pwd) => {
-                await handleJoinWithCredentials(rId, pwd);
+              onJoin={async (rId, pwd, name, retention, salt) => {
+                await handleJoinWithCredentials(rId, pwd, name, retention, salt);
                 navigate("/chat");
               }}
             />

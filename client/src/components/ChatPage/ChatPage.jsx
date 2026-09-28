@@ -564,6 +564,7 @@ export default function ChatPage({
         isOpen={showQRCode}
         onClose={() => setShowQRCode(false)}
         roomId={activeRoomId}
+        salt={currentRoom?.salt}
       />
 
       {/* Drag & Drop Visual Overlay */}

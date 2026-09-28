@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import QRCode from "react-qr-code";
 import { X, Copy, CheckCheck } from "lucide-react";
 
-export default function QRCodeModal({ isOpen, onClose, roomId = "" }) {
+export default function QRCodeModal({ isOpen, onClose, roomId = "", salt = "" }) {
   const [isCopied, setIsCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -12,6 +12,8 @@ export default function QRCodeModal({ isOpen, onClose, roomId = "" }) {
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
+
+  const qrValue = salt ? JSON.stringify({ id: roomId, salt }) : roomId;
 
   return (
     <div className="qr-code-overlay" onClick={onClose}>
@@ -27,7 +29,7 @@ export default function QRCodeModal({ isOpen, onClose, roomId = "" }) {
         </div>
         <div className="qr-code-content">
           <QRCode
-            value={roomId}
+            value={qrValue}
             size={200}
             style={{ height: "auto", maxWidth: "100%", width: "50%" }}
             viewBox="0 0 256 256"

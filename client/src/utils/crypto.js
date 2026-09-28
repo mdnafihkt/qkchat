@@ -1,12 +1,30 @@
 // Utility to handle E2E Encryption using Web Crypto API
 
-// Derives an AES-GCM key from a password and salt using PBKDF2
-export async function deriveKey(password, saltString) {
-    const enc = new TextEncoder();
+// Generates a cryptographically secure random 16-byte salt as a hex string
+export function generateRandomSalt() {
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    return Array.from(saltBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
-    // Hash the salt string (e.g. Chat ID) to get a predictable 16-byte salt buffer
-    const saltHashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(saltString));
-    const salt = new Uint8Array(saltHashBuffer).slice(0, 16);
+// Derives an AES-GCM key from a password and 16-byte salt using PBKDF2
+export async function deriveKey(password, roomSalt) {
+    const enc = new TextEncoder();
+    let salt;
+
+    if (typeof roomSalt === 'string') {
+        if (/^[0-9a-fA-F]{32}$/.test(roomSalt)) {
+            salt = new Uint8Array(16);
+            for (let i = 0; i < 16; i++) {
+                salt[i] = parseInt(roomSalt.substr(i * 2, 2), 16);
+            }
+        } else {
+            salt = enc.encode(roomSalt);
+        }
+    } else if (roomSalt instanceof Uint8Array) {
+        salt = roomSalt;
+    } else {
+        throw new Error('A valid room salt is required for key derivation.');
+    }
 
     const keyMaterial = await crypto.subtle.importKey(
         'raw',

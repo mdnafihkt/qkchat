@@ -1,0 +1,296 @@
+# QkChat v2.9 — Final Security Hardening Checklist
+
+**Objective:** Complete all remaining security work before archiving QkChat. This checklist is intended for an AI agent to execute sequentially.
+
+---
+
+# Priority 1 — Critical Security Fixes
+
+## F-01 — Random PBKDF2 Salt
+
+- [x] Generate a cryptographically secure random 16-byte salt when creating a room.
+- [x] Store the salt in room metadata.
+- [x] Derive AES-256 keys using `PBKDF2(password, roomSalt)`.
+- [x] Remove deterministic salt generation from `roomId`.
+
+---
+
+## F-02 — Non-Extractable Encryption Keys
+
+- [ ] Create `CryptoKey` objects with `extractable: false`.
+- [ ] Remove all JWK export/import logic.
+- [ ] Remove encryption key storage from `sessionStorage`.
+- [ ] Re-derive keys during Session Recovery using password + room salt.
+
+---
+
+## F-03 — Encrypt Files at Rest
+
+- [ ] Stop storing decrypted `Blob`s in IndexedDB.
+- [ ] Store encrypted file ciphertext.
+- [ ] Store IV, MIME type, filename, and encrypted bytes only.
+- [ ] Decrypt files only in volatile memory when viewing or downloading.
+
+---
+
+## F-04 — Replay Protection
+
+- [ ] Add authenticated monotonically increasing sequence numbers to encrypted payloads.
+- [ ] Track highest accepted sequence number per room.
+- [ ] Reject duplicate sequence numbers.
+- [ ] Reject duplicate `messageId`s.
+- [ ] Ignore replayed packets.
+
+---
+
+## F-05 — Authenticated File Transfer Metadata
+
+- [ ] Encrypt/authenticate transfer metadata with each chunk.
+- [ ] Validate `transferId`.
+- [ ] Validate `chunkIndex`.
+- [ ] Validate `chunkCount`.
+- [ ] Validate declared file size.
+- [ ] Reject malformed transfers.
+- [ ] Expire incomplete transfers after timeout.
+
+---
+
+## F-06 — Challenge-Response Room Join
+
+- [ ] Implement nonce-based challenge from server.
+- [ ] Client signs nonce using room key (HMAC).
+- [ ] Verify proof before reserving peer slot.
+- [ ] Reject unauthenticated room joins.
+
+---
+
+# Priority 2 — Backend (Railway) Hardening
+
+## B-01 — Remove Sensitive Logs
+
+- [ ] Remove logs containing Room IDs.
+- [ ] Remove logs containing Peer IDs.
+- [ ] Remove logs containing Socket IDs.
+- [ ] Remove logs containing filenames.
+- [ ] Remove logs containing ciphertext or IVs.
+- [ ] Remove logs containing shared payloads.
+- [ ] Keep only startup, health, warning, and fatal error logs.
+
+---
+
+## B-02 — Production CORS Only
+
+- [ ] Remove wildcard origins.
+- [ ] Remove hardcoded localhost origins from production.
+- [ ] Allow only the production Netlify domain.
+- [ ] Allow localhost only in development mode.
+
+---
+
+## B-03 — Socket Connection Limits
+
+- [ ] Limit concurrent WebSocket connections per IP.
+- [ ] Disconnect excess sockets immediately.
+- [ ] Apply limits across reconnects.
+- [ ] Reject excessive connection attempts.
+
+---
+
+## B-04 — Persistent Rate Limiting
+
+- [ ] Replace socket-level rate limiting.
+- [ ] Implement IP/Peer token bucket.
+- [ ] Preserve rate limit across reconnects.
+
+---
+
+## B-05 — Room Cleanup
+
+- [ ] Remove rooms immediately when last peer disconnects.
+- [ ] Expire abandoned rooms after timeout.
+- [ ] Clean stale room state from server memory.
+
+---
+
+## B-06 — Input Validation
+
+- [ ] Validate Room ID format server-side.
+- [ ] Reject malformed room IDs.
+- [ ] Validate socket payload sizes.
+- [ ] Reject oversized events before processing.
+
+---
+
+# Priority 3 — Browser & PWA Security
+
+## P-01 — Remove Production Debug Logs
+
+- [ ] Remove IndexedDB debug logs.
+- [ ] Remove Share Target logs.
+- [ ] Remove room state logs.
+- [ ] Remove crypto logs.
+- [ ] Wrap development logs with `import.meta.env.DEV`.
+
+---
+
+## P-02 — Blob URL Cleanup
+
+- [ ] Revoke every `URL.createObjectURL()`.
+- [ ] Clean Blob URLs on component unmount.
+- [ ] Clean Blob URLs when leaving rooms.
+
+---
+
+## P-03 — Cache Protection
+
+- [ ] ensure there is no remenants from native share sheet code
+- [ ] Remove stale cached sensitive responses during updates.
+
+---
+
+## P-05 — Content Security Policy
+
+- [ ] Add strict CSP.
+- [ ] Allow scripts only from `self`.
+- [ ] Allow WebSocket connections only to Railway backend.
+- [ ] Block framing (`frame-ancestors 'none'`).
+- [ ] Disable object/embed execution.
+
+---
+
+## P-06 — HTTP Security Headers
+
+Enable via Helmet.
+
+- [ ] HSTS.
+- [ ] X-Frame-Options = `DENY`.
+- [ ] Referrer-Policy = `no-referrer`.
+- [ ] X-Content-Type-Options = `nosniff`.
+- [ ] Permissions-Policy (camera only).
+
+---
+
+# Priority 4 — Client Data Cleanup
+
+## C-01 — Local Room Cleanup
+
+- [ ] Delete room metadata when room is deleted.
+- [ ] Delete encrypted messages when leaving room.
+- [ ] Delete encrypted files when leaving room.
+- [ ] Delete peer metadata for removed rooms.
+- [ ] Clean stale rooms during startup.
+
+---
+
+## C-02 — Session Cleanup
+
+- [ ] Clear in-memory keys on logout/leave.
+- [ ] Clear temporary share payloads after use.
+- [ ] Clear abandoned transfer buffers.
+
+---
+
+# Priority 5 — Abuse Protection
+
+## A-01 — File Transfer Limits
+
+- [ ] Enforce maximum file size.
+- [ ] Limit simultaneous transfers.
+- [ ] Abort transfers exceeding limits.
+- [ ] Abort inactive transfers after timeout.
+
+---
+
+## A-02 — Memory Exhaustion Protection
+
+- [ ] Validate accumulated chunk size.
+- [ ] Reject chunk overflow.
+- [ ] Reject unexpected chunk ordering.
+- [ ] Free transfer buffers on failure.
+
+---
+
+# Priority 6 — Build & Deployment Hardening
+
+## D-01 — Vite Production Build
+
+- [ ] Disable production source maps.
+- [ ] Verify no development artifacts are included.
+- [ ] Verify no secrets are bundled.
+
+---
+
+## D-02 — Railway Deployment
+
+- [ ] Ensure environment variables are never exposed.
+- [ ] Disable verbose production error responses.
+- [ ] Keep only required environment variables.
+
+---
+
+## D-03 — Netlify Deployment
+
+- [ ] Verify `_headers` includes CSP and cache headers.
+- [ ] Verify redirects do not expose sensitive endpoints.
+- [ ] Ensure `public/` contains only static assets.
+
+---
+
+## D-04 — Dependency Audit
+
+- [ ] Remove unused packages.
+- [ ] Run `npm audit`.
+- [ ] Update vulnerable dependencies.
+- [ ] Keep `package-lock.json` committed.
+
+---
+
+# Priority 7 — UX Safety
+
+## U-01 — Confirmation Dialogs
+
+- [ ] Confirm before leaving a room.
+- [ ] Confirm before deleting a room.
+- [ ] Warn before deleting encrypted local history.
+
+---
+
+## U-02 — Session Locking
+
+- [ ] Lock rooms after refresh when key is unavailable.
+- [ ] Require password for Session Recovery.
+- [ ] Never auto-unlock without successful key derivation.
+
+---
+
+# Final Release Verification
+
+## Backend
+
+- [ ] No sensitive logs in Railway.
+- [ ] CORS restricted to production.
+- [ ] Rate limiting works across reconnects.
+- [ ] Connection limits enforced.
+- [ ] Empty rooms removed automatically.
+
+## Frontend
+
+- [ ] No debug logs in production.
+- [ ] No plaintext encryption keys stored.
+- [ ] No plaintext files stored in IndexedDB.
+- [ ] Blob URLs revoked correctly.
+- [ ] Cache headers applied.
+
+## Security
+
+- [ ] CSP enabled.
+- [ ] Helmet headers enabled.
+- [ ] Replay protection active.
+- [ ] File metadata authenticated.
+- [ ] Room join challenge-response implemented.
+
+## UX
+
+- [ ] Confirmation before destructive actions.
+- [ ] Session recovery works with non-extractable keys.
+- [ ] Local data cleanup verified.

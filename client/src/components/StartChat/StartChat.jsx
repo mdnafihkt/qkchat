@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { Shield, Lock, Copy, Info, Check, Clock, Tag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import QRCode from "react-qr-code";
+import { generateRandomSalt } from "../../utils/crypto";
 import "./StartChat.css";
 
 export default function StartChat({ onJoin }) {
   const navigate = useNavigate();
   const [newChatDetails, setNewChatDetails] = useState({
     id: "",
+    salt: "",
     name: "",
     password: "",
     retentionPeriod: 86400000, // 24 Hours default
@@ -18,7 +20,8 @@ export default function StartChat({ onJoin }) {
   useEffect(() => {
     const generateSegment = () => Math.random().toString(36).substring(2, 10);
     const randomId = generateSegment() + "-" + generateSegment();
-    setNewChatDetails((prev) => ({ ...prev, id: randomId }));
+    const randomSalt = generateRandomSalt();
+    setNewChatDetails((prev) => ({ ...prev, id: randomId, salt: randomSalt }));
   }, []);
 
   const copyToClipboard = (text) => {
@@ -35,7 +38,8 @@ export default function StartChat({ onJoin }) {
           newChatDetails.id,
           newChatDetails.password,
           newChatDetails.name,
-          newChatDetails.retentionPeriod
+          newChatDetails.retentionPeriod,
+          newChatDetails.salt
         );
         navigate("/chat");
       } catch (err) {
@@ -45,7 +49,7 @@ export default function StartChat({ onJoin }) {
     }
   };
 
-  const qrPayload = newChatDetails.id;
+  const qrPayload = JSON.stringify({ id: newChatDetails.id, salt: newChatDetails.salt });
 
   return (
     <div className="glass-panel start-chat-container">

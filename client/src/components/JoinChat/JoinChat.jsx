@@ -7,6 +7,7 @@ import "./JoinChat.css";
 export default function JoinChat({ onJoin }) {
   const navigate = useNavigate();
   const [joinId, setJoinId] = useState("");
+  const [joinSalt, setJoinSalt] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState("");
@@ -21,7 +22,7 @@ export default function JoinChat({ onJoin }) {
     }
     setIsJoining(true);
     try {
-      await onJoin(joinId, joinPassword);
+      await onJoin(joinId.trim(), joinPassword.trim(), "", null, joinSalt || null);
       navigate("/chat");
     } catch (err) {
       setError("Failed to connect to chat room");
@@ -31,8 +32,25 @@ export default function JoinChat({ onJoin }) {
 
   const handleQRScanSuccess = async (decodedText) => {
     setIsScanning(false);
-    setJoinId(decodedText);
     setError("");
+    try {
+      const parsed = JSON.parse(decodedText);
+      if (parsed && parsed.id) {
+        setJoinId(parsed.id);
+        if (parsed.salt) {
+          setJoinSalt(parsed.salt);
+        }
+        return;
+      }
+    } catch (e) {}
+
+    if (decodedText.includes(":")) {
+      const parts = decodedText.split(":");
+      setJoinId(parts[0]);
+      setJoinSalt(parts[1]);
+    } else {
+      setJoinId(decodedText);
+    }
   };
 
   return (

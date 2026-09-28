@@ -72,6 +72,7 @@ function getOrCreateRoomState(roomId) {
     activeRooms.set(roomId, {
       registeredPeers: new Set(),
       activeSockets: new Map(),
+      salt: null,
     });
   }
   return activeRooms.get(roomId);
@@ -88,12 +89,30 @@ io.on('connection', (socket) => {
     next();
   });
 
+  // Query room salt for joining peer
+  socket.on('get_room_salt', (data, ackCallback) => {
+    if (!data || typeof data !== 'object') return;
+    const { roomId } = data;
+    if (!isValidRoomId(roomId)) {
+      if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_ROOM_ID' });
+      return;
+    }
+    const roomState = activeRooms.get(roomId);
+    if (typeof ackCallback === 'function') {
+      ackCallback({
+        success: true,
+        salt: roomState ? roomState.salt : null,
+      });
+    }
+  });
+
   // User joins a room identified by the chat ID with mandatory 2-peer capacity check
   socket.on('join_room', (data, ackCallback) => {
-    let roomId, peerId;
+    let roomId, peerId, salt;
     if (typeof data === 'object' && data !== null) {
       roomId = data.roomId;
       peerId = data.peerId;
+      salt = data.salt;
     } else {
       roomId = data;
     }
@@ -103,9 +122,12 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (peerId && typeof peerId === 'string') {
-      const roomState = getOrCreateRoomState(roomId);
+    const roomState = getOrCreateRoomState(roomId);
+    if (salt && typeof salt === 'string' && !roomState.salt) {
+      roomState.salt = salt;
+    }
 
+    if (peerId && typeof peerId === 'string') {
       // Enforce Two-Peer Trust Model: block any 3rd unique peer from joining
       if (!roomState.registeredPeers.has(peerId)) {
         if (roomState.registeredPeers.size >= 2) {
@@ -126,7 +148,7 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} (peer ${peerId || 'legacy'}) joined room: ${roomId}`);
     socket.to(roomId).emit('user_joined', { roomId, senderId: socket.id });
 
-    if (typeof ackCallback === 'function') ackCallback({ success: true });
+    if (typeof ackCallback === 'function') ackCallback({ success: true, salt: roomState.salt });
   });
 
   // User leaves a specific room (optionally clearing their peer registration slot)
