@@ -163,3 +163,69 @@ export async function decryptBinary(key, encryptedData, ivBase64, additionalData
     }
 }
 
+// Derives a domain-separated HMAC key from password and roomSalt using PBKDF2
+export async function deriveAuthKey(password, roomSalt) {
+    const enc = new TextEncoder();
+    let salt;
+
+    if (typeof roomSalt === 'string') {
+        if (/^[0-9a-fA-F]{32}$/.test(roomSalt)) {
+            salt = new Uint8Array(16);
+            for (let i = 0; i < 16; i++) {
+                salt[i] = parseInt(roomSalt.substr(i * 2, 2), 16);
+            }
+        } else {
+            salt = enc.encode(roomSalt);
+        }
+    } else if (roomSalt instanceof Uint8Array) {
+        salt = roomSalt;
+    } else {
+        throw new Error('A valid room salt is required for key derivation.');
+    }
+
+    // Domain separation: append "-auth" to ensure HMAC auth key is independent from AES-GCM encryption key
+    const authSalt = new Uint8Array(salt.length + 5);
+    authSalt.set(salt);
+    authSalt.set(enc.encode("-auth"), salt.length);
+
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        enc.encode(password),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveKey']
+    );
+
+    return crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt: authSalt,
+            iterations: 100000,
+            hash: 'SHA-256',
+        },
+        keyMaterial,
+        { name: 'HMAC', hash: 'SHA-256', length: 256 },
+        true, // exportable so creator can provide room verifier hex
+        ['sign', 'verify']
+    );
+}
+
+// Signs a challenge nonce using the derived HMAC auth key
+export async function signNonce(authKey, nonce) {
+    const enc = new TextEncoder();
+    const nonceBytes = enc.encode(nonce);
+    const signature = await crypto.subtle.sign(
+        'HMAC',
+        authKey,
+        nonceBytes
+    );
+    return arrayToBase64(Array.from(new Uint8Array(signature)));
+}
+
+// Exports auth key as hex string for room verifier initialization by creator
+export async function exportAuthKeyHex(authKey) {
+    const raw = await crypto.subtle.exportKey('raw', authKey);
+    return Array.from(new Uint8Array(raw)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+

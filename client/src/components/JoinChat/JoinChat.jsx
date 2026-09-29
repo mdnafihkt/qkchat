@@ -25,7 +25,7 @@ export default function JoinChat({ onJoin }) {
       await onJoin(joinId.trim(), joinPassword.trim(), "", null, joinSalt || null);
       navigate("/chat");
     } catch (err) {
-      setError("Failed to connect to chat room");
+      setError(err.message || "Failed to connect to chat room");
       setIsJoining(false);
     }
   };

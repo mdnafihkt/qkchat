@@ -67,12 +67,37 @@ function isValidRoomId(roomId) {
 // In-memory active room tracker (runtime state only, zero server persistence)
 const activeRooms = new Map();
 
+// In-memory pending challenges per socket: socket.id -> Map<roomId, { nonce, expiresAt }>
+const pendingChallenges = new Map();
+
+function getSocketChallenges(socketId) {
+  if (!pendingChallenges.has(socketId)) {
+    pendingChallenges.set(socketId, new Map());
+  }
+  return pendingChallenges.get(socketId);
+}
+
+function verifyAuthProof(authKeyHex, nonce, clientProofBase64) {
+  try {
+    if (!authKeyHex || !nonce || !clientProofBase64) return false;
+    const keyBuf = Buffer.from(authKeyHex, 'hex');
+    const expectedHmac = crypto.createHmac('sha256', keyBuf).update(Buffer.from(nonce, 'utf8')).digest('base64');
+    const expectedBuf = Buffer.from(expectedHmac, 'base64');
+    const clientBuf = Buffer.from(clientProofBase64, 'base64');
+    if (expectedBuf.length !== clientBuf.length) return false;
+    return crypto.timingSafeEqual(expectedBuf, clientBuf);
+  } catch (err) {
+    return false;
+  }
+}
+
 function getOrCreateRoomState(roomId) {
   if (!activeRooms.has(roomId)) {
     activeRooms.set(roomId, {
       registeredPeers: new Set(),
       activeSockets: new Map(),
       salt: null,
+      authKeyHex: null,
       seenMessageIds: new Set(),
     });
   }
@@ -107,46 +132,110 @@ io.on('connection', (socket) => {
     }
   });
 
-  // User joins a room identified by the chat ID with mandatory 2-peer capacity check
-  socket.on('join_room', (data, ackCallback) => {
-    let roomId, peerId, salt;
-    if (typeof data === 'object' && data !== null) {
-      roomId = data.roomId;
-      peerId = data.peerId;
-      salt = data.salt;
-    } else {
-      roomId = data;
+  // Issue a single-use random nonce challenge for joining a room
+  socket.on('get_join_challenge', (data, ackCallback) => {
+    if (!data || typeof data !== 'object') return;
+    const { roomId } = data;
+    if (!isValidRoomId(roomId)) {
+      if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_ROOM_ID' });
+      return;
     }
+
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const challenges = getSocketChallenges(socket.id);
+    challenges.set(roomId, {
+      nonce,
+      expiresAt: Date.now() + 30000, // 30 seconds
+    });
+
+    if (typeof ackCallback === 'function') {
+      ackCallback({ success: true, nonce });
+    }
+  });
+
+  // User joins a room with mandatory challenge-response proof before reserving peer slot
+  socket.on('join_room', (data, ackCallback) => {
+    if (!data || typeof data !== 'object') {
+      if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_REQUEST' });
+      return;
+    }
+    const { roomId, peerId, salt, authProof, roomVerifier } = data;
 
     if (!isValidRoomId(roomId)) {
       if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_ROOM_ID' });
       return;
     }
 
-    const roomState = getOrCreateRoomState(roomId);
-    if (salt && typeof salt === 'string' && !roomState.salt) {
-      roomState.salt = salt;
+    if (!peerId || typeof peerId !== 'string') {
+      if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'MISSING_PEER_ID' });
+      return;
     }
 
-    if (peerId && typeof peerId === 'string') {
-      // Enforce Two-Peer Trust Model: block any 3rd unique peer from joining
-      if (!roomState.registeredPeers.has(peerId)) {
-        if (roomState.registeredPeers.size >= 2) {
-          console.log(`Rejecting socket ${socket.id} (peer ${peerId}): Room ${roomId} capacity full (2 peers max).`);
-          socket.emit('room_full', { roomId, message: 'Room capacity reached. Only 2 peers allowed per room.' });
-          if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'ROOM_FULL' });
-          return;
-        }
-        roomState.registeredPeers.add(peerId);
+    // Verify challenge nonce
+    const challenges = getSocketChallenges(socket.id);
+    const challenge = challenges.get(roomId);
+    challenges.delete(roomId); // Single-use challenge
+
+    if (!challenge || Date.now() > challenge.expiresAt) {
+      console.warn(`[AUTH FAILED] Missing or expired challenge for socket ${socket.id} in room ${roomId}`);
+      if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'CHALLENGE_EXPIRED' });
+      return;
+    }
+
+    const roomState = getOrCreateRoomState(roomId);
+
+    // If room is newly created: verify creator proof against roomVerifier
+    if (!roomState.authKeyHex) {
+      if (!roomVerifier || typeof roomVerifier !== 'string' || !authProof || typeof authProof !== 'string') {
+        console.warn(`[AUTH FAILED] Missing credentials for room creation by socket ${socket.id} in room ${roomId}`);
+        if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'MISSING_CREDENTIALS' });
+        return;
       }
 
-      roomState.activeSockets.set(socket.id, peerId);
-      socket.currentRoomId = roomId;
-      socket.currentPeerId = peerId;
+      const isValid = verifyAuthProof(roomVerifier, challenge.nonce, authProof);
+      if (!isValid) {
+        console.warn(`[AUTH FAILED] Invalid creator proof by socket ${socket.id} in room ${roomId}`);
+        if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_CREDENTIALS' });
+        return;
+      }
+
+      roomState.authKeyHex = roomVerifier;
+      if (salt && typeof salt === 'string') {
+        roomState.salt = salt;
+      }
+    } else {
+      // Room already exists: verify client proof against existing roomState.authKeyHex
+      if (!authProof || typeof authProof !== 'string') {
+        console.warn(`[AUTH FAILED] Missing authProof from socket ${socket.id} in room ${roomId}`);
+        if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'MISSING_CREDENTIALS' });
+        return;
+      }
+
+      const isValid = verifyAuthProof(roomState.authKeyHex, challenge.nonce, authProof);
+      if (!isValid) {
+        console.warn(`[AUTH FAILED] Invalid room credentials from socket ${socket.id} in room ${roomId}`);
+        if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'INVALID_CREDENTIALS' });
+        return;
+      }
     }
 
+    // Proof verified! Enforce Two-Peer Trust Model before reserving slot
+    if (!roomState.registeredPeers.has(peerId)) {
+      if (roomState.registeredPeers.size >= 2) {
+        console.log(`Rejecting socket ${socket.id} (peer ${peerId}): Room ${roomId} capacity full (2 peers max).`);
+        socket.emit('room_full', { roomId, message: 'Room capacity reached. Only 2 peers allowed per room.' });
+        if (typeof ackCallback === 'function') ackCallback({ success: false, error: 'ROOM_FULL' });
+        return;
+      }
+      roomState.registeredPeers.add(peerId);
+    }
+
+    roomState.activeSockets.set(socket.id, peerId);
+    socket.currentRoomId = roomId;
+    socket.currentPeerId = peerId;
     socket.join(roomId);
-    console.log(`User ${socket.id} (peer ${peerId || 'legacy'}) joined room: ${roomId}`);
+
+    console.log(`User ${socket.id} (peer ${peerId}) authenticated and joined room: ${roomId}`);
     socket.to(roomId).emit('user_joined', { roomId, senderId: socket.id });
 
     if (typeof ackCallback === 'function') ackCallback({ success: true, salt: roomState.salt });
@@ -300,6 +389,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
+    pendingChallenges.delete(socket.id);
     if (socket.currentRoomId) {
       const roomState = activeRooms.get(socket.currentRoomId);
       if (roomState) {

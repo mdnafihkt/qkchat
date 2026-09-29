@@ -2,7 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import io from "socket.io-client";
 import { AlertCircle, X } from "lucide-react";
-import { deriveKey, generateRandomSalt, decryptMessage, decryptBinary } from "./utils/crypto";
+import {
+  deriveKey,
+  generateRandomSalt,
+  decryptMessage,
+  decryptBinary,
+  deriveAuthKey,
+  signNonce,
+  exportAuthKeyHex,
+} from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
 import {
@@ -284,10 +292,22 @@ export default function AppRoutes({ SOCKET_URL }) {
       const currentRooms = roomsRef.current;
       Object.keys(currentRooms).forEach((rId) => {
         const room = currentRooms[rId];
-        if (!room.isLocked) {
+        if (!room.isLocked && room.authKey) {
           const peerId = getOrCreateRoomPeerId(rId);
-          newSocket.emit("join_room", { roomId: rId, peerId });
-          autoSync(newSocket, rId);
+          newSocket.emit("get_join_challenge", { roomId: rId }, async (res) => {
+            if (res && res.success && res.nonce) {
+              try {
+                const authProof = await signNonce(room.authKey, res.nonce);
+                newSocket.emit("join_room", { roomId: rId, peerId, authProof }, (ack) => {
+                  if (ack && ack.success) {
+                    autoSync(newSocket, rId);
+                  }
+                });
+              } catch (err) {
+                console.error(`Failed to solve challenge on reconnect for room ${rId}:`, err);
+              }
+            }
+          });
         }
       });
 
@@ -607,8 +627,6 @@ export default function AppRoutes({ SOCKET_URL }) {
 
         for (const rId of activeRoomIds) {
           const salt = storedSaltsMap[rId] || null;
-          const peerId = getOrCreateRoomPeerId(rId);
-          activeSock.emit("join_room", { roomId: rId, peerId, salt });
 
           loadedRooms[rId] = {
             roomId: rId,
@@ -690,6 +708,8 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       setStoredRoomSalt(joinRoomId, salt);
       const key = await deriveKey(joinPassword, salt);
+      const authKey = await deriveAuthKey(joinPassword, salt);
+      const authKeyHex = await exportAuthKeyHex(authKey);
 
       // Store custom room name if provided
       if (joinRoomName && joinRoomName.trim()) {
@@ -701,18 +721,60 @@ export default function AppRoutes({ SOCKET_URL }) {
         localStorage.setItem(`qkchat_retention_${joinRoomId}`, joinRetentionPeriod.toString());
       }
 
-      // Update active room list in localStorage
+      // Request join challenge nonce from server
+      const challengeNonce = await new Promise((resolve, reject) => {
+        activeSock.emit("get_join_challenge", { roomId: joinRoomId }, (res) => {
+          if (res && res.success && res.nonce) {
+            resolve(res.nonce);
+          } else {
+            reject(new Error(res?.error || "Failed to get join challenge"));
+          }
+        });
+        setTimeout(() => reject(new Error("Challenge request timed out")), 5000);
+      });
+
+      // Sign nonce with HMAC auth key
+      const authProof = await signNonce(authKey, challengeNonce);
+
+      // Verify and load messages from ledger (decrypts existing messages with key)
+      const initialMsgs = await loadMessagesFromLedger(joinRoomId, key);
+
+      // Get or create per-room peer ID and emit authenticated join room on socket
+      const peerId = getOrCreateRoomPeerId(joinRoomId);
+      await new Promise((resolve, reject) => {
+        activeSock.emit(
+          "join_room",
+          {
+            roomId: joinRoomId,
+            peerId,
+            salt,
+            authProof,
+            roomVerifier: authKeyHex,
+          },
+          (ack) => {
+            if (ack && ack.success) {
+              resolve(ack);
+            } else {
+              const errMsg =
+                ack?.error === "INVALID_CREDENTIALS"
+                  ? "Invalid password for this room"
+                  : ack?.error === "ROOM_FULL"
+                  ? "Room capacity reached (2 peers max)"
+                  : ack?.error || "Failed to join room";
+              reject(new Error(errMsg));
+            }
+          }
+        );
+        setTimeout(() => reject(new Error("Join room timed out")), 5000);
+      });
+
+      // Update active room list in localStorage only after successful authentication
       const currentList = getStoredActiveRooms();
       if (!currentList.includes(joinRoomId)) {
         currentList.push(joinRoomId);
         setStoredActiveRooms(currentList);
       }
 
-      const initialMsgs = await loadMessagesFromLedger(joinRoomId, key);
-
-      // Get or create per-room peer ID and emit join room on socket
-      const peerId = getOrCreateRoomPeerId(joinRoomId);
-      activeSock.emit("join_room", { roomId: joinRoomId, peerId, salt });
       autoSync(activeSock, joinRoomId);
 
       const roomName = getStoredRoomNames()[joinRoomId] || (joinRoomName ? joinRoomName.trim() : "");
@@ -724,6 +786,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           roomId: joinRoomId,
           roomName,
           cryptoKey: key,
+          authKey,
           salt,
           messages: initialMsgs,
           isConnected: activeSock.connected,

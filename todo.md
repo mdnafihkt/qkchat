@@ -57,10 +57,10 @@
 
 ## F-06 — Challenge-Response Room Join
 
-- [ ] Implement nonce-based challenge from server.
-- [ ] Client signs nonce using room key (HMAC).
-- [ ] Verify proof before reserving peer slot.
-- [ ] Reject unauthenticated room joins.
+- [x] Implement nonce-based challenge from server.
+- [x] Client signs nonce using room key (HMAC).
+- [x] Verify proof before reserving peer slot.
+- [x] Reject unauthenticated room joins.
 
 ---
 
