@@ -10,6 +10,10 @@ import {
   updateMessageStatus,
   updateMessageEncryptedFile,
 } from "../../utils/ledger";
+import {
+  getNextOutgoingSeq,
+  recordMessageIdSeen,
+} from "../../utils/replayProtection";
 import ChatHeader from "./ChatHeader";
 import ChatSidebar from "./ChatSidebar";
 import ChatMessages from "./ChatMessages";
@@ -241,11 +245,14 @@ export default function ChatPage({
     const messageId =
       Date.now() + "-" + Math.random().toString(36).substring(2, 9);
     const timestamp = Date.now();
+    const nextSeq = getNextOutgoingSeq(activeRoomId);
+    recordMessageIdSeen(activeRoomId, messageId);
 
     const newMsgItem = {
       id: messageId,
       type: "text",
       text: newMessage,
+      seq: nextSeq,
       isOwn: true,
       status: "sending",
       time: new Date(timestamp).toLocaleTimeString([], {
@@ -277,6 +284,7 @@ export default function ChatPage({
         id: messageId,
         type: "text",
         text: textToSend,
+        seq: nextSeq,
       });
       const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
@@ -287,13 +295,18 @@ export default function ChatPage({
         status: "sending",
         ciphertext: encryptedPayload.ciphertext,
         iv: encryptedPayload.iv,
+        seq: nextSeq,
       });
 
       socket.emit(
         "send_message",
         {
           roomId: activeRoomId,
-          message: encryptedPayload,
+          message: {
+            ...encryptedPayload,
+            id: messageId,
+            seq: nextSeq,
+          },
         },
         async () => {
           setRooms((prev) => {
@@ -348,6 +361,8 @@ export default function ChatPage({
       Date.now() + "-" + Math.random().toString(36).substring(2, 9);
     const messageId = "msg-" + transferId;
     const timestamp = Date.now();
+    const nextSeq = getNextOutgoingSeq(activeRoomId);
+    recordMessageIdSeen(activeRoomId, messageId);
     const localUrl = URL.createObjectURL(file);
 
     const fileMsgItem = {
@@ -358,6 +373,7 @@ export default function ChatPage({
       fileType: file.type,
       fileData: localUrl,
       fileIcon: getFileIcon(file.type),
+      seq: nextSeq,
       isOwn: true,
       status: "sending",
       time: new Date(timestamp).toLocaleTimeString([], {
@@ -396,6 +412,7 @@ export default function ChatPage({
         fileSize: file.size,
         totalChunks,
         fileIcon: getFileIcon(file.type),
+        seq: nextSeq,
       });
       const encryptedPayload = await encryptMessage(cryptoKey, payload);
 
@@ -406,6 +423,7 @@ export default function ChatPage({
         status: "sending",
         ciphertext: encryptedPayload.ciphertext,
         iv: encryptedPayload.iv,
+        seq: nextSeq,
       });
 
       const fileBuffer = await file.arrayBuffer();
@@ -426,7 +444,14 @@ export default function ChatPage({
 
       socket.emit(
         "send_message",
-        { roomId: activeRoomId, message: encryptedPayload },
+        {
+          roomId: activeRoomId,
+          message: {
+            ...encryptedPayload,
+            id: messageId,
+            seq: nextSeq,
+          },
+        },
         async () => {
           setTransfers((prev) => ({
             ...prev,

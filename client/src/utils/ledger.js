@@ -43,6 +43,7 @@ export async function saveMessage(roomId, messageData) {
       status: messageData.status || "sent",
       ciphertext: messageData.ciphertext,
       iv: messageData.iv,
+      msgSeq: typeof messageData.seq === "number" ? messageData.seq : undefined,
     };
 
     const request = store.add(record);

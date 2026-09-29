@@ -35,11 +35,11 @@
 
 ## F-04 — Replay Protection
 
-- [ ] Add authenticated monotonically increasing sequence numbers to encrypted payloads.
-- [ ] Track highest accepted sequence number per room.
-- [ ] Reject duplicate sequence numbers.
-- [ ] Reject duplicate `messageId`s.
-- [ ] Ignore replayed packets.
+- [x] Add authenticated monotonically increasing sequence numbers to encrypted payloads.
+- [x] Track highest accepted sequence number per room.
+- [x] Reject duplicate sequence numbers.
+- [x] Reject duplicate `messageId`s.
+- [x] Ignore replayed packets.
 
 ---
 

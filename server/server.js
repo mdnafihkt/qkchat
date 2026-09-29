@@ -73,6 +73,7 @@ function getOrCreateRoomState(roomId) {
       registeredPeers: new Set(),
       activeSockets: new Map(),
       salt: null,
+      seenMessageIds: new Set(),
     });
   }
   return activeRooms.get(roomId);
@@ -189,6 +190,21 @@ io.on('connection', (socket) => {
     const { roomId, message } = data;
     if (!isValidRoomId(roomId) || !message) return;
 
+    const roomState = getOrCreateRoomState(roomId);
+    if (message.id && typeof message.id === 'string') {
+      if (!roomState.seenMessageIds) {
+        roomState.seenMessageIds = new Set();
+      }
+      if (roomState.seenMessageIds.has(message.id)) {
+        console.warn(`[REPLAY DETECTED] Duplicate messageId: ${message.id} in room: ${roomId}`);
+        if (typeof callback === 'function') {
+          callback({ success: false, error: 'DUPLICATE_MESSAGE_ID' });
+        }
+        return;
+      }
+      roomState.seenMessageIds.add(message.id);
+    }
+
     socket.to(roomId).emit('receive_message', {
       senderId: socket.id,
       roomId,
@@ -196,7 +212,7 @@ io.on('connection', (socket) => {
     });
 
     if (typeof callback === 'function') {
-      callback();
+      callback({ success: true });
     }
   });
 

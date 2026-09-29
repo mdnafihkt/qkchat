@@ -5,6 +5,14 @@ import { AlertCircle, X } from "lucide-react";
 import { deriveKey, generateRandomSalt, decryptMessage, decryptBinary } from "./utils/crypto";
 import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
+import {
+  initRoomSequence,
+  getHighestAcceptedSeq,
+  validateAndAcceptMessage,
+  isMessageIdSeen,
+  recordMessageIdSeen,
+  clearRoomReplayState,
+} from "./utils/replayProtection";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
 import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
@@ -165,9 +173,11 @@ export default function AppRoutes({ SOCKET_URL }) {
           } else if (record.fileBlob) {
             msgData.fileData = URL.createObjectURL(record.fileBlob);
           }
+          const seq = typeof msgData.seq === "number" ? msgData.seq : (typeof record.msgSeq === "number" ? record.msgSeq : undefined);
           decryptedMessages.push({
             id: record.messageId,
             ...msgData,
+            seq,
             isOwn: record.isOwn,
             status: record.status,
             time: new Date(record.timestamp).toLocaleTimeString([], {
@@ -194,6 +204,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           throw new Error("Invalid password: Failed to decrypt messages");
         }
       }
+      initRoomSequence(targetRoomId, decryptedMessages);
       return decryptedMessages;
     } catch (err) {
       console.error(`Failed to load messages for room ${targetRoomId}:`, err);
@@ -232,6 +243,7 @@ export default function AppRoutes({ SOCKET_URL }) {
     removeStoredRoomSalt(targetRoomId);
     removeRoomPeerId(targetRoomId);
     setStoredRoomName(targetRoomId, "");
+    clearRoomReplayState(targetRoomId);
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
     setStoredActiveRooms(updatedList);
 
@@ -367,7 +379,7 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       const newRemoteMessages = [];
       for (const item of syncMessages) {
-        if (room.messages.some((m) => m.id === item.id)) {
+        if (isMessageIdSeen(rId, item.id) || room.messages.some((m) => m.id === item.id)) {
           continue;
         }
 
@@ -384,9 +396,13 @@ export default function AppRoutes({ SOCKET_URL }) {
             msgData = { type: "text", text: decryptedText };
           }
 
+          const seq = typeof msgData.seq === "number" ? msgData.seq : undefined;
+          recordMessageIdSeen(rId, item.id);
+
           newRemoteMessages.push({
             id: item.id,
             ...msgData,
+            seq,
             senderId: item.wasOwn ? null : data.senderId,
             isOwn: !item.wasOwn,
             status: "sent",
@@ -405,6 +421,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           const currentRoom = prev[rId];
           if (!currentRoom) return prev;
           const merged = [...currentRoom.messages, ...newRemoteMessages];
+          initRoomSequence(rId, merged);
           const isCurrentActive = activeRoomIdRef.current === rId;
           return {
             ...prev,
@@ -425,12 +442,14 @@ export default function AppRoutes({ SOCKET_URL }) {
             status: msg.status,
             ciphertext: originalItem.ciphertext,
             iv: originalItem.iv,
+            seq: msg.seq,
           });
         }
       }
     });
 
     newSocket.on("receive_message", async (data) => {
+      if (!data || typeof data !== "object") return;
       if (data.senderId === newSocket.id) return;
       const rId = data.roomId || activeRoomIdRef.current;
       if (!rId) return;
@@ -438,7 +457,20 @@ export default function AppRoutes({ SOCKET_URL }) {
       const room = roomsRef.current[rId];
       if (!room || room.isLocked || !room.cryptoKey) return;
 
-      if (room.messages.some((m) => m.id === data.id)) return;
+      // 1. Early rejection of duplicate messageId from envelope
+      if (data.id && (isMessageIdSeen(rId, data.id) || room.messages.some((m) => m.id === data.id))) {
+        console.warn(`[Replay Protection] Ignored packet with duplicate messageId: ${data.id} in room: ${rId}`);
+        return;
+      }
+
+      // 2. Early rejection of duplicate/old sequence number from envelope
+      if (typeof data.seq === "number") {
+        const highestAccepted = getHighestAcceptedSeq(rId);
+        if (data.seq <= highestAccepted) {
+          console.warn(`[Replay Protection] Ignored packet with outer seq ${data.seq} <= highest accepted ${highestAccepted} in room: ${rId}`);
+          return;
+        }
+      }
 
       const decryptedText = await decryptMessage(room.cryptoKey, {
         ciphertext: data.ciphertext,
@@ -465,8 +497,31 @@ export default function AppRoutes({ SOCKET_URL }) {
           msgData = { type: "text", text: decryptedText };
         }
 
-        const messageId = msgData.id || Date.now();
-        if (room.messages.some((m) => m.id === messageId)) return;
+        const messageId = msgData.id || data.id;
+        if (!messageId) {
+          console.warn(`[Replay Protection] Ignored packet missing messageId in room: ${rId}`);
+          return;
+        }
+
+        // 3. Authenticated sequence number verification inside ciphertext
+        const seq = msgData.seq;
+        if (typeof seq !== "number" || !Number.isInteger(seq)) {
+          console.warn(`[Replay Protection] Ignored message without valid authenticated sequence number in room: ${rId}`);
+          return;
+        }
+
+        // 4. Verify outer sequence matches authenticated inner sequence
+        if (typeof data.seq === "number" && data.seq !== seq) {
+          console.warn(`[Replay Protection] Ignored message: outer seq (${data.seq}) does not match authenticated seq (${seq})`);
+          return;
+        }
+
+        // 5. Validate sequence number and messageId against replay protection state
+        const validation = validateAndAcceptMessage(rId, messageId, seq);
+        if (!validation.valid) {
+          console.warn(`[Replay Protection] Replay rejected (${validation.reason}): messageId=${messageId}, seq=${seq} in room: ${rId}`);
+          return;
+        }
 
         await saveMessage(rId, {
           messageId,
@@ -475,11 +530,13 @@ export default function AppRoutes({ SOCKET_URL }) {
           status: "sent",
           ciphertext: data.ciphertext,
           iv: data.iv,
+          seq,
         });
 
         newMessageObj = {
           id: messageId,
           ...msgData,
+          seq,
           senderId: data.senderId,
           isOwn: false,
           time: new Date(timestamp).toLocaleTimeString([], {
