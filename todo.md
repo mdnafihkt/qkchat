@@ -68,13 +68,13 @@
 
 ## B-01 — Remove Sensitive Logs
 
-- [ ] Remove logs containing Room IDs.
-- [ ] Remove logs containing Peer IDs.
-- [ ] Remove logs containing Socket IDs.
-- [ ] Remove logs containing filenames.
-- [ ] Remove logs containing ciphertext or IVs.
-- [ ] Remove logs containing shared payloads.
-- [ ] Keep only startup, health, warning, and fatal error logs.
+- [x] Remove logs containing Room IDs.
+- [x] Remove logs containing Peer IDs.
+- [x] Remove logs containing Socket IDs.
+- [x] Remove logs containing filenames.
+- [x] Remove logs containing ciphertext or IVs.
+- [x] Remove logs containing shared payloads.
+- [x] Keep only startup, health, warning, and fatal error logs.
 
 ---
 
