@@ -45,13 +45,13 @@
 
 ## F-05 — Authenticated File Transfer Metadata
 
-- [ ] Encrypt/authenticate transfer metadata with each chunk.
-- [ ] Validate `transferId`.
-- [ ] Validate `chunkIndex`.
-- [ ] Validate `chunkCount`.
-- [ ] Validate declared file size.
-- [ ] Reject malformed transfers.
-- [ ] Expire incomplete transfers after timeout.
+- [x] Encrypt/authenticate transfer metadata with each chunk.
+- [x] Validate `transferId`.
+- [x] Validate `chunkIndex`.
+- [x] Validate `chunkCount`.
+- [x] Validate declared file size.
+- [x] Reject malformed transfers.
+- [x] Expire incomplete transfers after timeout.
 
 ---
 

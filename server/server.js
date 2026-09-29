@@ -219,7 +219,26 @@ io.on('connection', (socket) => {
   socket.on('send_file_chunk', (data, callback) => {
     if (!data || typeof data !== 'object') return;
     const { roomId, chunk } = data;
-    if (!isValidRoomId(roomId) || !chunk) return;
+    if (!isValidRoomId(roomId) || !chunk || typeof chunk !== 'object') return;
+
+    // Validate chunk envelope parameters
+    if (
+      typeof chunk.transferId !== 'string' ||
+      !chunk.transferId.trim() ||
+      typeof chunk.chunkIndex !== 'number' ||
+      !Number.isInteger(chunk.chunkIndex) ||
+      chunk.chunkIndex < 0 ||
+      typeof chunk.totalChunks !== 'number' ||
+      !Number.isInteger(chunk.totalChunks) ||
+      chunk.totalChunks <= 0 ||
+      typeof chunk.fileSize !== 'number' ||
+      !Number.isInteger(chunk.fileSize) ||
+      chunk.fileSize <= 0
+    ) {
+      console.warn(`[MALFORMED CHUNK] Rejected chunk from ${socket.id} in room: ${roomId}`);
+      if (typeof callback === 'function') callback({ success: false, error: 'MALFORMED_CHUNK' });
+      return;
+    }
 
     socket.to(roomId).emit('receive_file_chunk', {
       roomId,
@@ -227,7 +246,7 @@ io.on('connection', (socket) => {
     });
 
     if (typeof callback === 'function') {
-      callback();
+      callback({ success: true });
     }
   });
 

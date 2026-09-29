@@ -115,10 +115,15 @@ export async function decryptMessage(key, encryptedData) {
 }
 
 // Encrypts an ArrayBuffer/TypedArray directly, returning raw encrypted ArrayBuffer and base64 encoded iv
-export async function encryptBinary(key, binaryData) {
+// Supports optional additionalData (AAD) for authenticated data
+export async function encryptBinary(key, binaryData, additionalData = null) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
+    const algorithm = { name: 'AES-GCM', iv };
+    if (additionalData) {
+        algorithm.additionalData = additionalData;
+    }
     const encryptedBuf = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
+        algorithm,
         key,
         binaryData
     );
@@ -128,7 +133,8 @@ export async function encryptBinary(key, binaryData) {
 }
 
 // Decrypts an encrypted ArrayBuffer, Blob, or TypedArray using base64 encoded iv, returning decrypted ArrayBuffer
-export async function decryptBinary(key, encryptedData, ivBase64) {
+// Supports optional additionalData (AAD) verification
+export async function decryptBinary(key, encryptedData, ivBase64, additionalData = null) {
     try {
         if (!key || !encryptedData || !ivBase64) return null;
         const iv = base64ToArray(ivBase64);
@@ -141,8 +147,12 @@ export async function decryptBinary(key, encryptedData, ivBase64) {
                 encryptedData.byteOffset + encryptedData.byteLength
             );
         }
+        const algorithm = { name: 'AES-GCM', iv };
+        if (additionalData) {
+            algorithm.additionalData = additionalData;
+        }
         const decryptedBuf = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv },
+            algorithm,
             key,
             buffer
         );
