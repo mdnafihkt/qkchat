@@ -80,10 +80,10 @@
 
 ## B-02 — Production CORS Only
 
-- [ ] Remove wildcard origins.
-- [ ] Remove hardcoded localhost origins from production.
-- [ ] Allow only the production Netlify domain.
-- [ ] Allow localhost only in development mode.
+- [x] Remove wildcard origins.
+- [x] Remove hardcoded localhost origins from production.
+- [x] Allow only the production Netlify domain.
+- [x] Allow localhost only in development mode.
 
 ---
 

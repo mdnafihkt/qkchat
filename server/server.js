@@ -7,19 +7,56 @@ const helmet = require('helmet');
 const app = express();
 app.use(helmet());
 
-// Configure Allowed Origins
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['https://qkchat.daimens.com', 'http://localhost:5173', 'http://localhost:3000'];
+// Environment check
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Default production domains (Netlify production custom domain & netlify.app domain)
+const defaultProductionOrigins = [
+  'https://qkchat.daimens.com',
+  'https://qkchat.netlify.app',
+];
+
+// Helper to check for localhost / 127.0.0.1 origins
+function isLocalhostOrigin(origin) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
+
+// Parse allowed origins from environment or use default production domains
+const envOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter((o) => o && o !== '*')
+  : defaultProductionOrigins;
+
+// Build the active allowed origins set
+// In production: strictly exclude wildcard origins and any localhost origins
+const allowedOrigins = isProduction
+  ? envOrigins.filter((origin) => !isLocalhostOrigin(origin) && origin !== '*')
+  : envOrigins;
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching allowedOrigins
-    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS policy error: Origin not allowed.'));
+    // Allow requests with no origin (e.g. curl, health check probes, server-to-server)
+    if (!origin) {
+      return callback(null, true);
     }
+
+    // Explicitly reject wildcard origins
+    if (origin === '*') {
+      return callback(new Error('CORS policy error: Wildcard origins not allowed.'));
+    }
+
+    // Allow localhost ONLY in development mode
+    if (!isProduction && isLocalhostOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    // Match configured allowed origins (e.g. production Netlify domain)
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('CORS policy error: Origin not allowed.'));
   },
   credentials: true,
 };
