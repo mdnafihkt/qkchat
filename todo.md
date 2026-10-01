@@ -98,9 +98,9 @@
 
 ## B-04 — Persistent Rate Limiting
 
-- [ ] Replace socket-level rate limiting.
-- [ ] Implement IP/Peer token bucket.
-- [ ] Preserve rate limit across reconnects.
+- [x] Replace socket-level rate limiting.
+- [x] Implement IP/Peer token bucket.
+- [x] Preserve rate limit across reconnects.
 
 ---
 

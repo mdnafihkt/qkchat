@@ -79,23 +79,92 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
-// Rate Limiting Helper for Socket connections
-const RATE_LIMIT_WINDOW_MS = 5000;
-const MAX_EVENTS_PER_WINDOW = 30;
+// Persistent IP & Peer Token Bucket Rate Limiting (B-04)
+const IP_BUCKET_CAPACITY = parseInt(process.env.IP_RATE_LIMIT_CAPACITY, 10) || 60;
+const IP_REFILL_RATE_PER_SEC = parseFloat(process.env.IP_RATE_LIMIT_REFILL_RATE, 10) || 20;
+const IP_REFILL_RATE_PER_MS = IP_REFILL_RATE_PER_SEC / 1000;
 
-function isRateLimited(socket) {
+const PEER_BUCKET_CAPACITY = parseInt(process.env.PEER_RATE_LIMIT_CAPACITY, 10) || 40;
+const PEER_REFILL_RATE_PER_SEC = parseFloat(process.env.PEER_RATE_LIMIT_REFILL_RATE, 10) || 15;
+const PEER_REFILL_RATE_PER_MS = PEER_REFILL_RATE_PER_SEC / 1000;
+
+const BUCKET_INACTIVITY_TTL_MS = 5 * 60 * 1000; // 5 minutes inactivity TTL
+
+// Global token buckets that persist across socket reconnects
+const ipRateLimitBuckets = new Map(); // ip -> { tokens, lastRefill, lastActivity }
+const peerRateLimitBuckets = new Map(); // peerId -> { tokens, lastRefill, lastActivity }
+
+// Periodically clean up inactive buckets to prevent memory accumulation
+const rateLimitCleanupInterval = setInterval(() => {
   const now = Date.now();
-  if (!socket.rateLimit) {
-    socket.rateLimit = { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS };
-    return false;
+  for (const [ip, bucket] of ipRateLimitBuckets.entries()) {
+    if (now - bucket.lastActivity > BUCKET_INACTIVITY_TTL_MS) {
+      ipRateLimitBuckets.delete(ip);
+    }
   }
-  if (now > socket.rateLimit.resetTime) {
-    socket.rateLimit.count = 1;
-    socket.rateLimit.resetTime = now + RATE_LIMIT_WINDOW_MS;
-    return false;
+  for (const [peerId, bucket] of peerRateLimitBuckets.entries()) {
+    if (now - bucket.lastActivity > BUCKET_INACTIVITY_TTL_MS) {
+      peerRateLimitBuckets.delete(peerId);
+    }
   }
-  socket.rateLimit.count += 1;
-  return socket.rateLimit.count > MAX_EVENTS_PER_WINDOW;
+}, 60000);
+if (rateLimitCleanupInterval.unref) {
+  rateLimitCleanupInterval.unref();
+}
+
+function isTokenBucketRateLimited(ip, peerId) {
+  const now = Date.now();
+
+  // 1. IP token bucket
+  let ipBucket = ipRateLimitBuckets.get(ip);
+  if (!ipBucket) {
+    ipBucket = {
+      tokens: IP_BUCKET_CAPACITY,
+      lastRefill: now,
+      lastActivity: now,
+    };
+    ipRateLimitBuckets.set(ip, ipBucket);
+  }
+
+  // Refill IP tokens based on elapsed time
+  const ipElapsed = now - ipBucket.lastRefill;
+  ipBucket.tokens = Math.min(IP_BUCKET_CAPACITY, ipBucket.tokens + ipElapsed * IP_REFILL_RATE_PER_MS);
+  ipBucket.lastRefill = now;
+  ipBucket.lastActivity = now;
+
+  // 2. Peer token bucket (if peerId is known)
+  let peerBucket = null;
+  if (peerId) {
+    peerBucket = peerRateLimitBuckets.get(peerId);
+    if (!peerBucket) {
+      peerBucket = {
+        tokens: PEER_BUCKET_CAPACITY,
+        lastRefill: now,
+        lastActivity: now,
+      };
+      peerRateLimitBuckets.set(peerId, peerBucket);
+    }
+
+    // Refill Peer tokens based on elapsed time
+    const peerElapsed = now - peerBucket.lastRefill;
+    peerBucket.tokens = Math.min(PEER_BUCKET_CAPACITY, peerBucket.tokens + peerElapsed * PEER_REFILL_RATE_PER_MS);
+    peerBucket.lastRefill = now;
+    peerBucket.lastActivity = now;
+  }
+
+  // Check if token can be consumed
+  const hasIpToken = ipBucket.tokens >= 1;
+  const hasPeerToken = !peerBucket || peerBucket.tokens >= 1;
+
+  if (hasIpToken && hasPeerToken) {
+    ipBucket.tokens -= 1;
+    if (peerBucket) {
+      peerBucket.tokens -= 1;
+    }
+    return false; // Not rate limited
+  }
+
+  return true; // Rate limited
 }
 
 // Input Validation Helper
@@ -242,9 +311,20 @@ io.on('connection', (socket) => {
     socket.disconnect(true);
     return;
   }
-  // Socket Rate Limiting Middleware
+  // Persistent Token Bucket Rate Limiting Middleware (IP & Peer)
   socket.use((packet, next) => {
-    if (isRateLimited(socket)) {
+    const data = packet[1];
+    const peerId =
+      socket.currentPeerId ||
+      (data && typeof data === 'object' && typeof data.peerId === 'string' ? data.peerId : null);
+    const ip = socket.clientIp || getClientIp(socket);
+
+    if (isTokenBucketRateLimited(ip, peerId)) {
+      const ack = typeof packet[packet.length - 1] === 'function' ? packet[packet.length - 1] : null;
+      if (ack) {
+        ack({ success: false, error: 'RATE_LIMIT_EXCEEDED' });
+      }
+      socket.emit('error', 'Rate limit exceeded. Please slow down.');
       return next(new Error('Rate limit exceeded. Please slow down.'));
     }
     next();
