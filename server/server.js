@@ -3,8 +3,10 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
+const crypto = require('crypto');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(helmet());
 
 // Environment check
@@ -141,7 +143,105 @@ function getOrCreateRoomState(roomId) {
   return activeRooms.get(roomId);
 }
 
+// Socket Connection Limits Configuration (B-03)
+const MAX_CONCURRENT_SOCKETS_PER_IP = parseInt(process.env.MAX_CONCURRENT_SOCKETS_PER_IP, 10) || 10;
+const MAX_CONNECTION_ATTEMPTS_PER_WINDOW = parseInt(process.env.MAX_CONNECTION_ATTEMPTS_PER_WINDOW, 10) || 30;
+const CONNECTION_ATTEMPT_WINDOW_MS = 60000; // 1-minute window
+
+// Active concurrent sockets per IP: IP -> Set<socket.id>
+const activeSocketsByIp = new Map();
+
+// Connection attempt rate limiting per IP: IP -> { count, resetTime }
+const connectionAttemptsByIp = new Map();
+
+// Periodically purge expired connection attempt records to prevent memory growth
+const connectionCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of connectionAttemptsByIp.entries()) {
+    if (now > record.resetTime) {
+      connectionAttemptsByIp.delete(ip);
+    }
+  }
+}, 60000);
+if (connectionCleanupInterval.unref) {
+  connectionCleanupInterval.unref();
+}
+
+function getClientIp(socket) {
+  const forwarded = socket.handshake.headers['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') {
+    const firstIp = forwarded.split(',')[0].trim();
+    if (firstIp) return firstIp;
+  }
+  return socket.handshake.address || (socket.conn && socket.conn.remoteAddress) || '127.0.0.1';
+}
+
+function registerActiveSocket(socket, ip) {
+  let ipSockets = activeSocketsByIp.get(ip);
+  if (!ipSockets) {
+    ipSockets = new Set();
+    activeSocketsByIp.set(ip, ipSockets);
+  }
+  ipSockets.add(socket.id);
+
+  const cleanup = () => {
+    const currentSockets = activeSocketsByIp.get(ip);
+    if (currentSockets) {
+      currentSockets.delete(socket.id);
+      if (currentSockets.size === 0) {
+        activeSocketsByIp.delete(ip);
+      }
+    }
+  };
+
+  socket.once('disconnect', cleanup);
+  if (socket.conn) {
+    socket.conn.once('close', cleanup);
+  }
+}
+
+// Socket Connection Middleware for Limits & Reconnect Protection (B-03)
+io.use((socket, next) => {
+  const ip = getClientIp(socket);
+  const now = Date.now();
+
+  // 1. Reject excessive connection attempts per IP
+  let attemptRecord = connectionAttemptsByIp.get(ip);
+  if (!attemptRecord || now > attemptRecord.resetTime) {
+    attemptRecord = { count: 1, resetTime: now + CONNECTION_ATTEMPT_WINDOW_MS };
+    connectionAttemptsByIp.set(ip, attemptRecord);
+  } else {
+    attemptRecord.count += 1;
+    if (attemptRecord.count > MAX_CONNECTION_ATTEMPTS_PER_WINDOW) {
+      console.warn('[CONNECTION LIMIT] Excessive connection attempts rejected.');
+      socket.disconnect(true);
+      return next(new Error('Too many connection attempts. Please slow down.'));
+    }
+  }
+
+  // 2. Limit concurrent WebSocket connections per IP & disconnect excess sockets immediately
+  const currentCount = activeSocketsByIp.has(ip) ? activeSocketsByIp.get(ip).size : 0;
+  if (currentCount >= MAX_CONCURRENT_SOCKETS_PER_IP) {
+    console.warn('[CONNECTION LIMIT] Concurrent connection limit exceeded.');
+    socket.disconnect(true);
+    return next(new Error('Connection limit exceeded. Too many concurrent connections.'));
+  }
+
+  // Register socket and track across reconnects
+  registerActiveSocket(socket, ip);
+  socket.clientIp = ip;
+  next();
+});
+
 io.on('connection', (socket) => {
+  // Secondary guard: Disconnect excess sockets immediately if limit reached
+  const ip = socket.clientIp || getClientIp(socket);
+  const ipSockets = activeSocketsByIp.get(ip);
+  if (ipSockets && ipSockets.size > MAX_CONCURRENT_SOCKETS_PER_IP) {
+    console.warn('[CONNECTION LIMIT] Excess socket disconnected immediately.');
+    socket.disconnect(true);
+    return;
+  }
   // Socket Rate Limiting Middleware
   socket.use((packet, next) => {
     if (isRateLimited(socket)) {
@@ -419,6 +519,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    const ip = socket.clientIp;
+    if (ip && activeSocketsByIp.has(ip)) {
+      const currentSockets = activeSocketsByIp.get(ip);
+      currentSockets.delete(socket.id);
+      if (currentSockets.size === 0) {
+        activeSocketsByIp.delete(ip);
+      }
+    }
     pendingChallenges.delete(socket.id);
     if (socket.currentRoomId) {
       const roomState = activeRooms.get(socket.currentRoomId);

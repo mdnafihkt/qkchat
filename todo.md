@@ -89,10 +89,10 @@
 
 ## B-03 — Socket Connection Limits
 
-- [ ] Limit concurrent WebSocket connections per IP.
-- [ ] Disconnect excess sockets immediately.
-- [ ] Apply limits across reconnects.
-- [ ] Reject excessive connection attempts.
+- [x] Limit concurrent WebSocket connections per IP.
+- [x] Disconnect excess sockets immediately.
+- [x] Apply limits across reconnects.
+- [x] Reject excessive connection attempts.
 
 ---
 
