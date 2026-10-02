@@ -199,7 +199,21 @@ function verifyAuthProof(authKeyHex, nonce, clientProofBase64) {
   }
 }
 
+function cleanupRoom(roomId) {
+  const roomState = activeRooms.get(roomId);
+  if (!roomState) return;
+
+  if (roomState.registeredPeers) roomState.registeredPeers.clear();
+  if (roomState.activeSockets) roomState.activeSockets.clear();
+  if (roomState.seenMessageIds) roomState.seenMessageIds.clear();
+  roomState.salt = null;
+  roomState.authKeyHex = null;
+
+  activeRooms.delete(roomId);
+}
+
 function getOrCreateRoomState(roomId) {
+  const now = Date.now();
   if (!activeRooms.has(roomId)) {
     activeRooms.set(roomId, {
       registeredPeers: new Set(),
@@ -207,9 +221,78 @@ function getOrCreateRoomState(roomId) {
       salt: null,
       authKeyHex: null,
       seenMessageIds: new Set(),
+      createdAt: now,
+      lastActivity: now,
     });
   }
-  return activeRooms.get(roomId);
+  const roomState = activeRooms.get(roomId);
+  roomState.lastActivity = now;
+  return roomState;
+}
+
+// Room Timeout Configurations (B-05)
+const ABANDONED_ROOM_TIMEOUT_MS = parseInt(process.env.ABANDONED_ROOM_TIMEOUT_MS, 10) || 15 * 60 * 1000; // 15 mins
+const ROOM_MAX_IDLE_TIMEOUT_MS = parseInt(process.env.ROOM_MAX_IDLE_TIMEOUT_MS, 10) || 60 * 60 * 1000; // 1 hour
+
+// Periodically clean abandoned rooms and stale memory
+const roomCleanupInterval = setInterval(() => {
+  const now = Date.now();
+
+  for (const [roomId, roomState] of activeRooms.entries()) {
+    // 1. Remove rooms immediately if no active sockets remain in memory
+    if (roomState.activeSockets.size === 0) {
+      cleanupRoom(roomId);
+      continue;
+    }
+
+    // 2. Expire abandoned rooms (1 peer waiting with no peer joining for > timeout)
+    const isWaitingForPeer = roomState.registeredPeers.size < 2;
+    const timeSinceActivity = now - (roomState.lastActivity || roomState.createdAt || now);
+
+    if (isWaitingForPeer && timeSinceActivity > ABANDONED_ROOM_TIMEOUT_MS) {
+      io.to(roomId).emit('room_expired', { roomId, reason: 'Room abandoned (peer never joined).' });
+      io.to(roomId).emit('room_deleted', { roomId, reason: 'Room abandoned (peer never joined).' });
+      for (const socketId of roomState.activeSockets.keys()) {
+        const s = io.sockets.sockets.get(socketId);
+        if (s) {
+          s.leave(roomId);
+          s.currentRoomId = null;
+        }
+      }
+      cleanupRoom(roomId);
+      continue;
+    }
+
+    // 3. Expire inactive rooms (idle > 1 hour)
+    if (timeSinceActivity > ROOM_MAX_IDLE_TIMEOUT_MS) {
+      io.to(roomId).emit('room_expired', { roomId, reason: 'Room expired due to inactivity.' });
+      io.to(roomId).emit('room_deleted', { roomId, reason: 'Room expired due to inactivity.' });
+      for (const socketId of roomState.activeSockets.keys()) {
+        const s = io.sockets.sockets.get(socketId);
+        if (s) {
+          s.leave(roomId);
+          s.currentRoomId = null;
+        }
+      }
+      cleanupRoom(roomId);
+      continue;
+    }
+  }
+
+  // 4. Clean stale pending challenge nonces
+  for (const [socketId, challenges] of pendingChallenges.entries()) {
+    for (const [roomId, challenge] of challenges.entries()) {
+      if (now > challenge.expiresAt) {
+        challenges.delete(roomId);
+      }
+    }
+    if (challenges.size === 0) {
+      pendingChallenges.delete(socketId);
+    }
+  }
+}, 60000);
+if (roomCleanupInterval.unref) {
+  roomCleanupInterval.unref();
 }
 
 // Socket Connection Limits Configuration (B-03)
@@ -476,8 +559,8 @@ io.on('connection', (socket) => {
         const targetPeerId = peerId || socket.currentPeerId;
         roomState.registeredPeers.delete(targetPeerId);
       }
-      if (roomState.activeSockets.size === 0 && roomState.registeredPeers.size === 0) {
-        activeRooms.delete(roomId);
+      if (roomState.activeSockets.size === 0) {
+        cleanupRoom(roomId);
       }
     }
 
@@ -594,8 +677,8 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('room_deleted', { roomId, deletedBy: socket.id });
 
-    // Clean up active room state
-    activeRooms.delete(roomId);
+    // Clean up active room state immediately
+    cleanupRoom(roomId);
   });
 
   socket.on('disconnect', () => {
@@ -612,8 +695,8 @@ io.on('connection', (socket) => {
       const roomState = activeRooms.get(socket.currentRoomId);
       if (roomState) {
         roomState.activeSockets.delete(socket.id);
-        if (roomState.activeSockets.size === 0 && roomState.registeredPeers.size === 0) {
-          activeRooms.delete(socket.currentRoomId);
+        if (roomState.activeSockets.size === 0) {
+          cleanupRoom(socket.currentRoomId);
         }
       }
     }

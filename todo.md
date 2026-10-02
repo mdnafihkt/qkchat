@@ -106,9 +106,9 @@
 
 ## B-05 — Room Cleanup
 
-- [ ] Remove rooms immediately when last peer disconnects.
-- [ ] Expire abandoned rooms after timeout.
-- [ ] Clean stale room state from server memory.
+- [x] Remove rooms immediately when last peer disconnects.
+- [x] Expire abandoned rooms after timeout.
+- [x] Clean stale room state from server memory.
 
 ---
 
