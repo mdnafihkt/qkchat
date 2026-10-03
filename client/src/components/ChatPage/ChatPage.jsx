@@ -14,6 +14,10 @@ import {
   getNextOutgoingSeq,
   recordMessageIdSeen,
 } from "../../utils/replayProtection";
+import {
+  createTrackedBlobUrl,
+  revokeRoomBlobUrls,
+} from "../../utils/blobRegistry";
 import ChatHeader from "./ChatHeader";
 import ChatSidebar from "./ChatSidebar";
 import ChatMessages from "./ChatMessages";
@@ -294,7 +298,7 @@ export default function ChatPage({
         const fileBlob = new Blob(transfer.chunks, {
           type: transfer.fileType,
         });
-        const fileUrl = URL.createObjectURL(fileBlob);
+        const fileUrl = createTrackedBlobUrl(activeRoomId, fileBlob);
 
         setRooms((prev) => {
           const r = prev[activeRoomId];
@@ -528,7 +532,7 @@ export default function ChatPage({
     const timestamp = Date.now();
     const nextSeq = getNextOutgoingSeq(activeRoomId);
     recordMessageIdSeen(activeRoomId, messageId);
-    const localUrl = URL.createObjectURL(file);
+    const localUrl = createTrackedBlobUrl(activeRoomId, file);
 
     const fileMsgItem = {
       id: messageId,

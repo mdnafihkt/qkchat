@@ -21,6 +21,12 @@ import {
   recordMessageIdSeen,
   clearRoomReplayState,
 } from "./utils/replayProtection";
+import {
+  createTrackedBlobUrl,
+  revokeTrackedBlobUrl,
+  revokeRoomBlobUrls,
+  revokeAllBlobUrls,
+} from "./utils/blobRegistry";
 import HomeSelection from "./components/HomeSelection/HomeSelection";
 import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
@@ -171,7 +177,7 @@ export default function AppRoutes({ SOCKET_URL }) {
                 const blob = new Blob([decryptedBuf], {
                   type: record.encryptedFile.mimeType || msgData.fileType || "application/octet-stream",
                 });
-                msgData.fileData = URL.createObjectURL(blob);
+                msgData.fileData = createTrackedBlobUrl(targetRoomId, blob);
                 msgData.fileName = record.encryptedFile.fileName || msgData.fileName;
                 msgData.fileType = record.encryptedFile.mimeType || msgData.fileType;
               }
@@ -181,7 +187,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               }
             }
           } else if (record.fileBlob) {
-            msgData.fileData = URL.createObjectURL(record.fileBlob);
+            msgData.fileData = createTrackedBlobUrl(targetRoomId, record.fileBlob);
           }
           const seq = typeof msgData.seq === "number" ? msgData.seq : (typeof record.msgSeq === "number" ? record.msgSeq : undefined);
           decryptedMessages.push({
@@ -260,6 +266,7 @@ export default function AppRoutes({ SOCKET_URL }) {
     removeRoomPeerId(targetRoomId);
     setStoredRoomName(targetRoomId, "");
     clearRoomReplayState(targetRoomId);
+    revokeRoomBlobUrls(targetRoomId);
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
     setStoredActiveRooms(updatedList);
 
@@ -677,6 +684,10 @@ export default function AppRoutes({ SOCKET_URL }) {
     };
 
     initializeRooms();
+
+    return () => {
+      revokeAllBlobUrls();
+    };
   }, []);
 
   // Periodically prune expired messages across all unlocked rooms
@@ -691,11 +702,19 @@ export default function AppRoutes({ SOCKET_URL }) {
           setRooms((prev) => {
             const target = prev[rId];
             if (!target) return prev;
+            const remaining = [];
+            for (const m of target.messages) {
+              if (m.timestamp >= cutoff) {
+                remaining.push(m);
+              } else if (m.fileData && typeof m.fileData === "string" && m.fileData.startsWith("blob:")) {
+                revokeTrackedBlobUrl(m.fileData, rId);
+              }
+            }
             return {
               ...prev,
               [rId]: {
                 ...target,
-                messages: target.messages.filter((m) => m.timestamp >= cutoff),
+                messages: remaining,
               },
             };
           });

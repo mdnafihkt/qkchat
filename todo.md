@@ -135,9 +135,9 @@
 
 ## P-02 — Blob URL Cleanup
 
-- [ ] Revoke every `URL.createObjectURL()`.
-- [ ] Clean Blob URLs on component unmount.
-- [ ] Clean Blob URLs when leaving rooms.
+- [x] Revoke every `URL.createObjectURL()`.
+- [x] Clean Blob URLs on component unmount.
+- [x] Clean Blob URLs when leaving rooms.
 
 ---
 
