@@ -167,9 +167,34 @@ function isTokenBucketRateLimited(ip, peerId) {
   return true; // Rate limited
 }
 
-// Input Validation Helper
+// Input Validation Configuration (B-06)
+// Room IDs must strictly be alphanumeric with dashes/underscores, 3 to 64 characters long
+const ROOM_ID_REGEX = /^[a-zA-Z0-9_-]{3,64}$/;
+
 function isValidRoomId(roomId) {
-  return typeof roomId === 'string' && roomId.trim().length > 0 && roomId.length <= 128;
+  if (typeof roomId !== 'string') return false;
+  const trimmed = roomId.trim();
+  if (trimmed.length < 3 || trimmed.length > 64) return false;
+  return ROOM_ID_REGEX.test(trimmed);
+}
+
+// Socket Payload Size Limits (B-06)
+const MAX_FILE_CHUNK_PAYLOAD_BYTES = 2 * 1024 * 1024; // 2MB for base64 file chunk + metadata
+const MAX_SYNC_PAYLOAD_BYTES = 2 * 1024 * 1024; // 2MB for sync response message history
+const MAX_STANDARD_PAYLOAD_BYTES = 128 * 1024; // 128KB for chat messages, auth proofs, room requests
+
+function getPayloadSize(data) {
+  if (data === undefined || data === null) return 0;
+  if (typeof data === 'string') return Buffer.byteLength(data, 'utf8');
+  if (Buffer.isBuffer(data)) return data.length;
+  if (typeof data === 'object') {
+    try {
+      return Buffer.byteLength(JSON.stringify(data), 'utf8');
+    } catch (e) {
+      return -1; // Malformed / circular
+    }
+  }
+  return 0;
 }
 
 // In-memory active room tracker (runtime state only, zero server persistence)
@@ -394,9 +419,31 @@ io.on('connection', (socket) => {
     socket.disconnect(true);
     return;
   }
-  // Persistent Token Bucket Rate Limiting Middleware (IP & Peer)
+  // Packet Middleware: Payload Size Validation & Token Bucket Rate Limiting (B-06, B-04)
   socket.use((packet, next) => {
+    const eventName = packet[0];
     const data = packet[1];
+
+    // 1. Validate socket payload size before processing (B-06)
+    let maxAllowedBytes = MAX_STANDARD_PAYLOAD_BYTES;
+    if (eventName === 'send_file_chunk') {
+      maxAllowedBytes = MAX_FILE_CHUNK_PAYLOAD_BYTES;
+    } else if (eventName === 'sync_response') {
+      maxAllowedBytes = MAX_SYNC_PAYLOAD_BYTES;
+    }
+
+    const payloadSize = getPayloadSize(data);
+    if (payloadSize < 0 || payloadSize > maxAllowedBytes) {
+      console.warn('[INPUT VALIDATION] Oversized or malformed payload rejected.');
+      const ack = typeof packet[packet.length - 1] === 'function' ? packet[packet.length - 1] : null;
+      if (ack) {
+        ack({ success: false, error: payloadSize < 0 ? 'MALFORMED_PAYLOAD' : 'PAYLOAD_TOO_LARGE' });
+      }
+      socket.emit('error', 'Payload size exceeds allowed limit.');
+      return next(new Error('Payload size exceeds allowed limit.'));
+    }
+
+    // 2. Persistent Token Bucket Rate Limiting (IP & Peer) (B-04)
     const peerId =
       socket.currentPeerId ||
       (data && typeof data === 'object' && typeof data.peerId === 'string' ? data.peerId : null);
@@ -570,9 +617,19 @@ io.on('connection', (socket) => {
 
   // Relay encrypted messages directly to the room
   socket.on('send_message', (data, callback) => {
-    if (!data || typeof data !== 'object') return;
+    if (!data || typeof data !== 'object') {
+      if (typeof callback === 'function') callback({ success: false, error: 'INVALID_REQUEST' });
+      return;
+    }
     const { roomId, message } = data;
-    if (!isValidRoomId(roomId) || !message) return;
+    if (!isValidRoomId(roomId)) {
+      if (typeof callback === 'function') callback({ success: false, error: 'INVALID_ROOM_ID' });
+      return;
+    }
+    if (!message || typeof message !== 'object') {
+      if (typeof callback === 'function') callback({ success: false, error: 'INVALID_MESSAGE' });
+      return;
+    }
 
     const roomState = getOrCreateRoomState(roomId);
     if (message.id && typeof message.id === 'string') {
@@ -601,9 +658,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_file_chunk', (data, callback) => {
-    if (!data || typeof data !== 'object') return;
+    if (!data || typeof data !== 'object') {
+      if (typeof callback === 'function') callback({ success: false, error: 'INVALID_REQUEST' });
+      return;
+    }
     const { roomId, chunk } = data;
-    if (!isValidRoomId(roomId) || !chunk || typeof chunk !== 'object') return;
+    if (!isValidRoomId(roomId)) {
+      if (typeof callback === 'function') callback({ success: false, error: 'INVALID_ROOM_ID' });
+      return;
+    }
+    if (!chunk || typeof chunk !== 'object') {
+      if (typeof callback === 'function') callback({ success: false, error: 'MALFORMED_CHUNK' });
+      return;
+    }
 
     // Validate chunk envelope parameters
     if (

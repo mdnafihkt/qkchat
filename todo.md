@@ -114,10 +114,10 @@
 
 ## B-06 — Input Validation
 
-- [ ] Validate Room ID format server-side.
-- [ ] Reject malformed room IDs.
-- [ ] Validate socket payload sizes.
-- [ ] Reject oversized events before processing.
+- [x] Validate Room ID format server-side.
+- [x] Reject malformed room IDs.
+- [x] Validate socket payload sizes.
+- [x] Reject oversized events before processing.
 
 ---
 
