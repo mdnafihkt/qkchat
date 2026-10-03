@@ -23,7 +23,9 @@ export default function SessionRecovery({ roomId, onRecoveryComplete }) {
       await onRecoveryComplete(roomId, password);
       navigate("/chat");
     } catch (err) {
-      console.error("Recovery failed:", err);
+      if (import.meta.env.DEV) {
+        console.error("Recovery failed:", err);
+      }
       setError("Failed to recover session. Please check your password and try again.");
     } finally {
       setIsLoading(false);

@@ -125,11 +125,11 @@
 
 ## P-01 — Remove Production Debug Logs
 
-- [ ] Remove IndexedDB debug logs.
-- [ ] Remove Share Target logs.
-- [ ] Remove room state logs.
-- [ ] Remove crypto logs.
-- [ ] Wrap development logs with `import.meta.env.DEV`.
+- [x] Remove IndexedDB debug logs.
+- [x] Remove Share Target logs.
+- [x] Remove room state logs.
+- [x] Remove crypto logs.
+- [x] Wrap development logs with `import.meta.env.DEV`.
 
 ---
 

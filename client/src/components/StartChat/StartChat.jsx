@@ -43,7 +43,9 @@ export default function StartChat({ onJoin }) {
         );
         navigate("/chat");
       } catch (err) {
-        console.error("Failed to connect", err);
+        if (import.meta.env.DEV) {
+          console.error("Failed to connect", err);
+        }
         setIsJoining(false);
       }
     }

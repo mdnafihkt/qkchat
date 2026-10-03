@@ -92,7 +92,9 @@ export default function ChatPage({
     if (!socket) return;
 
     const abortTransfer = (transferId, reason) => {
-      console.warn(`[File Transfer] Aborting transfer ${transferId}: ${reason}`);
+      if (import.meta.env.DEV) {
+        console.warn(`[File Transfer] Aborting transfer ${transferId}: ${reason}`);
+      }
       const t = activeTransfersRef.current[transferId];
       if (t) {
         if (t.timeoutId) clearTimeout(t.timeoutId);
@@ -136,7 +138,9 @@ export default function ChatPage({
         !encryptedData ||
         !encryptedMeta
       ) {
-        console.warn("[File Transfer] Rejected malformed chunk: missing or invalid field types");
+        if (import.meta.env.DEV) {
+          console.warn("[File Transfer] Rejected malformed chunk: missing or invalid field types");
+        }
         return;
       }
 
@@ -149,11 +153,13 @@ export default function ChatPage({
         fileSize <= 0 ||
         fileSize > MAX_FILE_SIZE
       ) {
-        console.warn("[File Transfer] Rejected malformed chunk: values out of allowed bounds", {
-          chunkIndex,
-          totalChunks,
-          fileSize,
-        });
+        if (import.meta.env.DEV) {
+          console.warn("[File Transfer] Rejected malformed chunk: values out of allowed bounds", {
+            chunkIndex,
+            totalChunks,
+            fileSize,
+          });
+        }
         return;
       }
 
@@ -161,11 +167,15 @@ export default function ChatPage({
       const msg = messages.find((m) => m.transferId === transferId);
       if (msg) {
         if (msg.totalChunks && msg.totalChunks !== totalChunks) {
-          console.warn("[File Transfer] Rejected malformed chunk: totalChunks mismatch with message descriptor");
+          if (import.meta.env.DEV) {
+            console.warn("[File Transfer] Rejected malformed chunk: totalChunks mismatch with message descriptor");
+          }
           return;
         }
         if (msg.fileSize && msg.fileSize !== fileSize) {
-          console.warn("[File Transfer] Rejected malformed chunk: fileSize mismatch with message descriptor");
+          if (import.meta.env.DEV) {
+            console.warn("[File Transfer] Rejected malformed chunk: fileSize mismatch with message descriptor");
+          }
           return;
         }
       }
@@ -173,7 +183,9 @@ export default function ChatPage({
       // 4. Decrypt and Authenticate Metadata
       const metaStr = await decryptMessage(cryptoKey, encryptedMeta);
       if (!metaStr) {
-        console.warn("[File Transfer] Rejected malformed chunk: metadata decryption/authentication failed");
+        if (import.meta.env.DEV) {
+          console.warn("[File Transfer] Rejected malformed chunk: metadata decryption/authentication failed");
+        }
         return;
       }
 
@@ -181,7 +193,9 @@ export default function ChatPage({
       try {
         meta = JSON.parse(metaStr);
       } catch (err) {
-        console.warn("[File Transfer] Rejected malformed chunk: metadata is not valid JSON");
+        if (import.meta.env.DEV) {
+          console.warn("[File Transfer] Rejected malformed chunk: metadata is not valid JSON");
+        }
         return;
       }
 
@@ -191,10 +205,12 @@ export default function ChatPage({
         meta.totalChunks !== totalChunks ||
         meta.fileSize !== fileSize
       ) {
-        console.warn("[File Transfer] Rejected malformed chunk: authenticated metadata does not match chunk headers", {
-          meta,
-          chunk: { transferId, chunkIndex, totalChunks, fileSize },
-        });
+        if (import.meta.env.DEV) {
+          console.warn("[File Transfer] Rejected malformed chunk: authenticated metadata does not match chunk headers", {
+            meta,
+            chunk: { transferId, chunkIndex, totalChunks, fileSize },
+          });
+        }
         return;
       }
 
@@ -202,7 +218,9 @@ export default function ChatPage({
       const aad = getChunkAad(transferId, chunkIndex, totalChunks, fileSize);
       const decryptedData = await decryptBinary(cryptoKey, encryptedData, iv, aad);
       if (!decryptedData) {
-        console.warn(`[File Transfer] Rejected malformed chunk: chunk ${chunkIndex} authentication/decryption failed`);
+        if (import.meta.env.DEV) {
+          console.warn(`[File Transfer] Rejected malformed chunk: chunk ${chunkIndex} authentication/decryption failed`);
+        }
         return;
       }
 
@@ -309,7 +327,9 @@ export default function ChatPage({
               "delivered"
             );
           } catch (encErr) {
-            console.error("Failed to encrypt received file for storage:", encErr);
+            if (import.meta.env.DEV) {
+              console.error("Failed to encrypt received file for storage:", encErr);
+            }
           }
 
           if (msg && msg.senderId) {
@@ -469,7 +489,9 @@ export default function ChatPage({
         }
       );
     } catch (err) {
-      console.error("Failed to send message", err);
+      if (import.meta.env.DEV) {
+        console.error("Failed to send message", err);
+      }
     }
   };
 
@@ -680,7 +702,9 @@ export default function ChatPage({
         }
       );
     } catch (err) {
-      console.error("Failed to upload file in chunks:", err);
+      if (import.meta.env.DEV) {
+        console.error("Failed to upload file in chunks:", err);
+      }
       setTransfers((prev) => ({
         ...prev,
         [transferId]: { progress: 0, status: "Failed" },

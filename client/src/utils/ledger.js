@@ -6,7 +6,9 @@ export function initDB() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = (event) => {
-      console.error("IndexedDB error:", event.target.error);
+      if (import.meta.env.DEV) {
+        console.error("IndexedDB error:", event.target.error);
+      }
       reject(event.target.error);
     };
 
@@ -55,7 +57,9 @@ export async function saveMessage(roomId, messageData) {
     request.onerror = (event) => {
       // If a message with the same messageId already exists, don't fail, just update/skip.
       // But typically check duplicates before calling saveMessage.
-      console.error("Failed to save message to ledger:", event.target.error);
+      if (import.meta.env.DEV) {
+        console.error("Failed to save message to ledger:", event.target.error);
+      }
       reject(event.target.error);
     };
   });

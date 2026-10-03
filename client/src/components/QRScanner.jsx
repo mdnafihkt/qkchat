@@ -31,7 +31,9 @@ export default function QRScanner({ onScanSuccess, onScanFailure }) {
       );
       setIsScanning(true);
     } catch (err) {
-      console.error("Failed to start scanner:", err);
+      if (import.meta.env.DEV) {
+        console.error("Failed to start scanner:", err);
+      }
     }
   };
 

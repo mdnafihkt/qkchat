@@ -176,7 +176,9 @@ export default function AppRoutes({ SOCKET_URL }) {
                 msgData.fileType = record.encryptedFile.mimeType || msgData.fileType;
               }
             } catch (fileErr) {
-              console.error("Failed to decrypt stored file:", fileErr);
+              if (import.meta.env.DEV) {
+                console.error("Failed to decrypt stored file:", fileErr);
+              }
             }
           } else if (record.fileBlob) {
             msgData.fileData = URL.createObjectURL(record.fileBlob);
@@ -215,7 +217,9 @@ export default function AppRoutes({ SOCKET_URL }) {
       initRoomSequence(targetRoomId, decryptedMessages);
       return decryptedMessages;
     } catch (err) {
-      console.error(`Failed to load messages for room ${targetRoomId}:`, err);
+      if (import.meta.env.DEV) {
+        console.error(`Failed to load messages for room ${targetRoomId}:`, err);
+      }
       throw err;
     }
   };
@@ -233,7 +237,9 @@ export default function AppRoutes({ SOCKET_URL }) {
         timestamp: lastTimestamp,
       });
     } catch (err) {
-      console.error(`Failed to trigger autoSync for room ${targetRoomId}:`, err);
+      if (import.meta.env.DEV) {
+        console.error(`Failed to trigger autoSync for room ${targetRoomId}:`, err);
+      }
     }
   };
 
@@ -245,7 +251,9 @@ export default function AppRoutes({ SOCKET_URL }) {
     }
 
     await clearRoomMessages(targetRoomId).catch((err) => {
-      console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
+      if (import.meta.env.DEV) {
+        console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
+      }
     });
 
     removeStoredRoomSalt(targetRoomId);
@@ -304,7 +312,9 @@ export default function AppRoutes({ SOCKET_URL }) {
                   }
                 });
               } catch (err) {
-                console.error(`Failed to solve challenge on reconnect for room ${rId}:`, err);
+                if (import.meta.env.DEV) {
+                  console.error(`Failed to solve challenge on reconnect for room ${rId}:`, err);
+                }
               }
             }
           });
@@ -332,7 +342,9 @@ export default function AppRoutes({ SOCKET_URL }) {
 
     newSocket.on("room_full", ({ roomId: rId, message }) => {
       if (!rId) return;
-      console.warn(`Room full rejection for ${rId}: ${message}`);
+      if (import.meta.env.DEV) {
+        console.warn(`Room full rejection for ${rId}: ${message}`);
+      }
       setRooms((prev) => {
         const room = prev[rId];
         if (!room) return prev;
@@ -386,7 +398,9 @@ export default function AppRoutes({ SOCKET_URL }) {
           });
         }
       } catch (err) {
-        console.error("Failed to handle sync_request:", err);
+        if (import.meta.env.DEV) {
+          console.error("Failed to handle sync_request:", err);
+        }
       }
     });
 
@@ -479,7 +493,9 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       // 1. Early rejection of duplicate messageId from envelope
       if (data.id && (isMessageIdSeen(rId, data.id) || room.messages.some((m) => m.id === data.id))) {
-        console.warn(`[Replay Protection] Ignored packet with duplicate messageId: ${data.id} in room: ${rId}`);
+        if (import.meta.env.DEV) {
+          console.warn(`[Replay Protection] Ignored packet with duplicate messageId: ${data.id} in room: ${rId}`);
+        }
         return;
       }
 
@@ -487,7 +503,9 @@ export default function AppRoutes({ SOCKET_URL }) {
       if (typeof data.seq === "number") {
         const highestAccepted = getHighestAcceptedSeq(rId);
         if (data.seq <= highestAccepted) {
-          console.warn(`[Replay Protection] Ignored packet with outer seq ${data.seq} <= highest accepted ${highestAccepted} in room: ${rId}`);
+          if (import.meta.env.DEV) {
+            console.warn(`[Replay Protection] Ignored packet with outer seq ${data.seq} <= highest accepted ${highestAccepted} in room: ${rId}`);
+          }
           return;
         }
       }
@@ -501,7 +519,9 @@ export default function AppRoutes({ SOCKET_URL }) {
       let newMessageObj;
 
       if (decryptedText === null) {
-        console.error(`Failed to decrypt message for room ${rId}`);
+        if (import.meta.env.DEV) {
+          console.error(`Failed to decrypt message for room ${rId}`);
+        }
         newMessageObj = {
           id: Date.now(),
           text: "[Encrypted message - Failed to decrypt]",
@@ -519,27 +539,35 @@ export default function AppRoutes({ SOCKET_URL }) {
 
         const messageId = msgData.id || data.id;
         if (!messageId) {
-          console.warn(`[Replay Protection] Ignored packet missing messageId in room: ${rId}`);
+          if (import.meta.env.DEV) {
+            console.warn(`[Replay Protection] Ignored packet missing messageId in room: ${rId}`);
+          }
           return;
         }
 
         // 3. Authenticated sequence number verification inside ciphertext
         const seq = msgData.seq;
         if (typeof seq !== "number" || !Number.isInteger(seq)) {
-          console.warn(`[Replay Protection] Ignored message without valid authenticated sequence number in room: ${rId}`);
+          if (import.meta.env.DEV) {
+            console.warn(`[Replay Protection] Ignored message without valid authenticated sequence number in room: ${rId}`);
+          }
           return;
         }
 
         // 4. Verify outer sequence matches authenticated inner sequence
         if (typeof data.seq === "number" && data.seq !== seq) {
-          console.warn(`[Replay Protection] Ignored message: outer seq (${data.seq}) does not match authenticated seq (${seq})`);
+          if (import.meta.env.DEV) {
+            console.warn(`[Replay Protection] Ignored message: outer seq (${data.seq}) does not match authenticated seq (${seq})`);
+          }
           return;
         }
 
         // 5. Validate sequence number and messageId against replay protection state
         const validation = validateAndAcceptMessage(rId, messageId, seq);
         if (!validation.valid) {
-          console.warn(`[Replay Protection] Replay rejected (${validation.reason}): messageId=${messageId}, seq=${seq} in room: ${rId}`);
+          if (import.meta.env.DEV) {
+            console.warn(`[Replay Protection] Replay rejected (${validation.reason}): messageId=${messageId}, seq=${seq} in room: ${rId}`);
+          }
           return;
         }
 
@@ -799,7 +827,9 @@ export default function AppRoutes({ SOCKET_URL }) {
       setActiveRoomId(joinRoomId);
       return Promise.resolve();
     } catch (err) {
-      console.error("Failed to join room:", err);
+      if (import.meta.env.DEV) {
+        console.error("Failed to join room:", err);
+      }
       return Promise.reject(err);
     }
   };

@@ -109,7 +109,9 @@ export async function decryptMessage(key, encryptedData) {
 
         return dec.decode(decryptedBuf);
     } catch (err) {
-        console.error('Decryption failed. Incorrect password or tampered message.');
+        if (import.meta.env.DEV) {
+            console.error('Decryption failed. Incorrect password or tampered message.');
+        }
         return null; // Return null on decryption failure
     }
 }
@@ -158,7 +160,9 @@ export async function decryptBinary(key, encryptedData, ivBase64, additionalData
         );
         return decryptedBuf;
     } catch (err) {
-        console.error('Binary decryption failed:', err);
+        if (import.meta.env.DEV) {
+            console.error('Binary decryption failed:', err);
+        }
         return null;
     }
 }
