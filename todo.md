@@ -143,8 +143,8 @@
 
 ## P-03 — Cache Protection
 
-- [ ] ensure there is no remenants from native share sheet code
-- [ ] Remove stale cached sensitive responses during updates.
+- [x] ensure there is no remenants from native share sheet code
+- [x] Remove stale cached sensitive responses during updates.
 
 ---
 

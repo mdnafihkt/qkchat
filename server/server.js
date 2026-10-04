@@ -67,6 +67,9 @@ app.use(cors(corsOptions));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

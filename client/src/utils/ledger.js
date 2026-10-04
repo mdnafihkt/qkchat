@@ -26,6 +26,10 @@ export function initDB() {
         store.createIndex("roomId", "roomId", { unique: false });
         store.createIndex("messageId", "messageId", { unique: true });
       }
+      // Clean up legacy remnants from removed native share sheet / target
+      if (db.objectStoreNames.contains("shared_payload")) {
+        db.deleteObjectStore("shared_payload");
+      }
     };
   });
 }
