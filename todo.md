@@ -150,11 +150,11 @@
 
 ## P-05 — Content Security Policy
 
-- [ ] Add strict CSP.
-- [ ] Allow scripts only from `self`.
-- [ ] Allow WebSocket connections only to Railway backend.
-- [ ] Block framing (`frame-ancestors 'none'`).
-- [ ] Disable object/embed execution.
+- [x] Add strict CSP.
+- [x] Allow scripts only from `self`.
+- [x] Allow WebSocket connections only to Railway backend.
+- [x] Block framing (`frame-ancestors 'none'`).
+- [x] Disable object/embed execution.
 
 ---
 

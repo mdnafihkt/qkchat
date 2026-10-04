@@ -1,6 +1,7 @@
-# HTML documents: Ensure browsers always validate and never serve stale cached app shells or sensitive pages
+# HTML documents: Ensure browsers always validate, apply strict Content-Security-Policy and cache headers
 /*
   Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' ws://localhost:3000 http://localhost:3000 wss://*.up.railway.app https://*.up.railway.app; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';
 
 # Service worker and manifest: Must not be cached by browser HTTP cache
 /sw.js
