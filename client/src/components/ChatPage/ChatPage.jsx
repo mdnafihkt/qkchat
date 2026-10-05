@@ -105,6 +105,13 @@ export default function ChatPage({
       const t = activeTransfersRef.current[transferId];
       if (t) {
         if (t.timeoutId) clearTimeout(t.timeoutId);
+        // Free transfer buffers immediately on failure (A-02)
+        if (Array.isArray(t.chunks)) {
+          for (let i = 0; i < t.chunks.length; i++) {
+            t.chunks[i] = null;
+          }
+          t.chunks.length = 0;
+        }
         t.chunks = null;
         delete activeTransfersRef.current[transferId];
       }
@@ -281,9 +288,26 @@ export default function ChatPage({
       // Ignore duplicate chunks (idempotent)
       if (transfer.chunks[chunkIndex]) return;
 
-      // Cumulative size check: ensure received bytes cannot exceed declared fileSize
+      // Reject unexpected chunk ordering: enforce sequential in-order chunk processing (A-02)
+      // Chunks must arrive sequentially (chunkIndex === transfer.receivedCount)
+      if (chunkIndex !== transfer.receivedCount) {
+        abortTransfer(
+          transferId,
+          `Unexpected chunk ordering: expected chunk ${transfer.receivedCount}, but received chunk ${chunkIndex}`
+        );
+        return;
+      }
+
+      // Validate individual chunk size bounds: individual chunk must not exceed CHUNK_SIZE (or remaining file bytes)
+      const expectedRemaining = transfer.fileSize - transfer.accumulatedBytes;
+      if (decryptedData.byteLength > CHUNK_SIZE || decryptedData.byteLength > expectedRemaining) {
+        abortTransfer(transferId, "Individual chunk overflow: chunk byte length exceeded allowed chunk or remaining bounds");
+        return;
+      }
+
+      // Validate accumulated chunk size & reject chunk overflow (A-02)
       if (transfer.accumulatedBytes + decryptedData.byteLength > transfer.fileSize) {
-        abortTransfer(transferId, "Cumulative chunk bytes exceeded declared fileSize");
+        abortTransfer(transferId, "Cumulative chunk overflow: received bytes exceeded declared fileSize");
         return;
       }
 

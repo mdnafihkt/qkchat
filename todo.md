@@ -204,10 +204,10 @@ Enable via Helmet.
 
 ## A-02 — Memory Exhaustion Protection
 
-- [ ] Validate accumulated chunk size.
-- [ ] Reject chunk overflow.
-- [ ] Reject unexpected chunk ordering.
-- [ ] Free transfer buffers on failure.
+- [x] Validate accumulated chunk size.
+- [x] Reject chunk overflow.
+- [x] Reject unexpected chunk ordering.
+- [x] Free transfer buffers on failure.
 
 ---
 
