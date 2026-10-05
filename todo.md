@@ -174,11 +174,11 @@ Enable via Helmet.
 
 ## C-01 — Local Room Cleanup
 
-- [ ] Delete room metadata when room is deleted.
-- [ ] Delete encrypted messages when leaving room.
-- [ ] Delete encrypted files when leaving room.
-- [ ] Delete peer metadata for removed rooms.
-- [ ] Clean stale rooms during startup.
+- [x] Delete room metadata when room is deleted.
+- [x] Delete encrypted messages when leaving room.
+- [x] Delete encrypted files when leaving room.
+- [x] Delete peer metadata for removed rooms.
+- [x] Clean stale rooms during startup.
 
 ---
 

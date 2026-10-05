@@ -11,7 +11,14 @@ import {
   signNonce,
   exportAuthKeyHex,
 } from "./utils/crypto";
-import { saveMessage, getRoomMessages, updateMessageStatus, clearRoomMessages, clearExpiredMessages } from "./utils/ledger";
+import {
+  saveMessage,
+  getRoomMessages,
+  updateMessageStatus,
+  clearRoomMessages,
+  clearExpiredMessages,
+  deleteStaleRoomMessages,
+} from "./utils/ledger";
 import { getOrCreateRoomPeerId, removeRoomPeerId } from "./utils/peer";
 import {
   initRoomSequence,
@@ -265,6 +272,7 @@ export default function AppRoutes({ SOCKET_URL }) {
     removeStoredRoomSalt(targetRoomId);
     removeRoomPeerId(targetRoomId);
     setStoredRoomName(targetRoomId, "");
+    localStorage.removeItem(`qkchat_retention_${targetRoomId}`);
     clearRoomReplayState(targetRoomId);
     revokeRoomBlobUrls(targetRoomId);
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
@@ -656,6 +664,48 @@ export default function AppRoutes({ SOCKET_URL }) {
       const storedNamesMap = getStoredRoomNames();
       const storedSaltsMap = getStoredRoomSalts();
       const loadedRooms = {};
+
+      // Clean stale rooms and orphaned ledger data during startup (C-01)
+      await deleteStaleRoomMessages(activeRoomIds).catch((err) => {
+        if (import.meta.env.DEV) {
+          console.error("Failed to prune stale room messages during startup:", err);
+        }
+      });
+
+      // Prune orphaned room names and salts that no longer exist in activeRoomIds
+      const activeSet = new Set(activeRoomIds);
+      let namesChanged = false;
+      for (const rId of Object.keys(storedNamesMap)) {
+        if (!activeSet.has(rId)) {
+          delete storedNamesMap[rId];
+          namesChanged = true;
+        }
+      }
+      if (namesChanged) {
+        localStorage.setItem("qkchat_room_names", JSON.stringify(storedNamesMap));
+      }
+
+      let saltsChanged = false;
+      for (const rId of Object.keys(storedSaltsMap)) {
+        if (!activeSet.has(rId)) {
+          delete storedSaltsMap[rId];
+          saltsChanged = true;
+        }
+      }
+      if (saltsChanged) {
+        localStorage.setItem("qkchat_room_salts", JSON.stringify(storedSaltsMap));
+      }
+
+      // Prune orphaned retention and peer keys in localStorage
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("qkchat_retention_") || key.startsWith("qkchat_peer_id_"))) {
+          const rId = key.replace("qkchat_retention_", "").replace("qkchat_peer_id_", "");
+          if (!activeSet.has(rId)) {
+            localStorage.removeItem(key);
+          }
+        }
+      }
 
       if (activeRoomIds.length > 0) {
         const activeSock = initSocketIfNeeded();

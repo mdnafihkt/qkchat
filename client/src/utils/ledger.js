@@ -233,4 +233,32 @@ export async function clearAllRoomsExcept(activeRoomId) {
   });
 }
 
+// Clear all messages belonging to rooms not in the valid active rooms list
+export async function deleteStaleRoomMessages(validRoomIds = []) {
+  const validSet = new Set(validRoomIds);
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["messages"], "readwrite");
+    const store = transaction.objectStore("messages");
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        if (!validSet.has(cursor.value.roomId)) {
+          cursor.delete();
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+
+    request.onerror = (event) => {
+      reject(event.target.error);
+    };
+  });
+}
+
+
 
