@@ -7,6 +7,7 @@ const crypto = require('crypto');
 
 const app = express();
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
 
 // HTTP Security Headers (P-06)
 app.use(
@@ -107,7 +108,23 @@ app.get('/health', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({ status: 'ok' });
+});
+
+// 404 Catch-All Handler (D-02)
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+// Centralized Non-Verbose Production Error Handler (D-02)
+app.use((err, req, res, next) => {
+  if (!isProduction) {
+    console.error('Unhandled server error:', err);
+  }
+  // Never expose internal stack traces or environment details
+  res.status(err.status || 500).json({
+    error: isProduction ? 'Internal Server Error' : (err.message || 'Internal Server Error'),
+  });
 });
 
 

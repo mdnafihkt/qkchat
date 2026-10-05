@@ -223,9 +223,9 @@ Enable via Helmet.
 
 ## D-02 — Railway Deployment
 
-- [ ] Ensure environment variables are never exposed.
-- [ ] Disable verbose production error responses.
-- [ ] Keep only required environment variables.
+- [x] Ensure environment variables are never exposed.
+- [x] Disable verbose production error responses.
+- [x] Keep only required environment variables.
 
 ---
 
