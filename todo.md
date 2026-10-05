@@ -194,10 +194,11 @@ Enable via Helmet.
 
 ## A-01 — File Transfer Limits
 
-- [ ] Enforce maximum file size.
-- [ ] Limit simultaneous transfers.
-- [ ] Abort transfers exceeding limits.
-- [ ] Abort inactive transfers after timeout.
+- [x] Enforce maximum file size.
+- [x] Limit simultaneous transfers.
+- [x] Abort transfers exceeding limits.
+- [x] Ensure retry for failed file transfer after a period.
+- [x] Abort inactive transfers if retry fails.
 
 ---
 

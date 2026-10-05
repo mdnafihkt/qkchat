@@ -32,6 +32,9 @@ const CHUNK_SIZE = 512 * 1024; // 512 KB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_CHUNKS = Math.ceil(MAX_FILE_SIZE / CHUNK_SIZE) + 10; // ~110 chunks
 const TRANSFER_TIMEOUT_MS = 60 * 1000; // 60 seconds
+const MAX_SIMULTANEOUS_TRANSFERS = 3; // Limit active simultaneous file transfers
+const MAX_CHUNK_RETRIES = 3; // Maximum retry attempts per chunk
+const CHUNK_RETRY_DELAY_MS = 1500; // 1.5s delay before retrying failed chunk
 
 function getChunkAad(transferId, chunkIndex, totalChunks, fileSize) {
   return new TextEncoder().encode(
@@ -230,6 +233,15 @@ export default function ChatPage({
 
       // 6. Initialize or Retrieve Transfer Assembly State
       if (!activeTransfersRef.current[transferId]) {
+        // Enforce maximum simultaneous incoming transfers limit (A-01)
+        const currentActiveCount = Object.keys(activeTransfersRef.current).length;
+        if (currentActiveCount >= MAX_SIMULTANEOUS_TRANSFERS) {
+          if (import.meta.env.DEV) {
+            console.warn(`[File Transfer] Rejected transfer ${transferId}: simultaneous transfer limit (${MAX_SIMULTANEOUS_TRANSFERS}) reached.`);
+          }
+          return;
+        }
+
         activeTransfersRef.current[transferId] = {
           chunks: new Array(totalChunks),
           receivedCount: 0,
@@ -524,12 +536,22 @@ export default function ChatPage({
   const processFileSend = async (file) => {
     if (!file || !socket || !cryptoKey || isLocked) return;
 
+    // Enforce maximum file size (A-01)
     if (file.size > MAX_FILE_SIZE) {
       alert(
         `File size must be less than 50MB. Your file is ${(
           file.size /
           (1024 * 1024)
         ).toFixed(2)}MB.`
+      );
+      return;
+    }
+
+    // Limit simultaneous file transfers (A-01)
+    const currentTransferCount = Object.keys(transfers).length;
+    if (currentTransferCount >= MAX_SIMULTANEOUS_TRANSFERS) {
+      alert(
+        `Too many concurrent transfers. Please wait for ongoing transfers to finish (max ${MAX_SIMULTANEOUS_TRANSFERS}).`
       );
       return;
     }
@@ -667,26 +689,64 @@ export default function ChatPage({
             };
             const encryptedMeta = await encryptMessage(cryptoKey, JSON.stringify(chunkMeta));
 
-            await new Promise((resolve) => {
-              socket.emit(
-                "send_file_chunk",
-                {
-                  roomId: activeRoomId,
-                  chunk: {
-                    transferId,
-                    chunkIndex,
-                    totalChunks,
-                    fileSize: file.size,
-                    iv,
-                    encryptedData,
-                    encryptedMeta,
-                  },
-                },
-                () => {
-                  resolve();
+            // Emit chunk with retry mechanism (A-01)
+            let chunkSent = false;
+            let retryCount = 0;
+
+            while (!chunkSent && retryCount <= MAX_CHUNK_RETRIES) {
+              try {
+                await new Promise((resolve, reject) => {
+                  const ackTimeout = setTimeout(() => {
+                    reject(new Error(`Chunk ${chunkIndex} timed out waiting for server acknowledgment`));
+                  }, 8000);
+
+                  socket.emit(
+                    "send_file_chunk",
+                    {
+                      roomId: activeRoomId,
+                      chunk: {
+                        transferId,
+                        chunkIndex,
+                        totalChunks,
+                        fileSize: file.size,
+                        iv,
+                        encryptedData,
+                        encryptedMeta,
+                      },
+                    },
+                    (res) => {
+                      clearTimeout(ackTimeout);
+                      if (res && res.success === false) {
+                        reject(new Error(res.error || "Server rejected chunk"));
+                      } else {
+                        resolve();
+                      }
+                    }
+                  );
+                });
+                chunkSent = true;
+              } catch (chunkErr) {
+                retryCount++;
+                if (retryCount <= MAX_CHUNK_RETRIES) {
+                  if (import.meta.env.DEV) {
+                    console.warn(
+                      `[File Transfer] Retrying chunk ${chunkIndex} for transfer ${transferId} (attempt ${retryCount}/${MAX_CHUNK_RETRIES}) after ${CHUNK_RETRY_DELAY_MS}ms...`
+                    );
+                  }
+                  setTransfers((prev) => ({
+                    ...prev,
+                    [transferId]: {
+                      progress: Math.round(((chunkIndex) / totalChunks) * 100),
+                      status: `Retrying (${retryCount}/${MAX_CHUNK_RETRIES})`,
+                    },
+                  }));
+                  await new Promise((r) => setTimeout(r, CHUNK_RETRY_DELAY_MS));
+                } else {
+                  // Abort transfer if retry fails
+                  throw new Error(`Failed to transmit chunk ${chunkIndex} after ${MAX_CHUNK_RETRIES} retries: ${chunkErr.message}`);
                 }
-              );
-            });
+              }
+            }
 
             const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
             setTransfers((prev) => ({
@@ -722,6 +782,18 @@ export default function ChatPage({
         ...prev,
         [transferId]: { progress: 0, status: "Failed" },
       }));
+      setRooms((prev) => {
+        const r = prev[activeRoomId];
+        if (!r) return prev;
+        const updatedMsgs = r.messages.map((msg) =>
+          msg.id === messageId ? { ...msg, status: "failed" } : msg
+        );
+        return {
+          ...prev,
+          [activeRoomId]: { ...r, messages: updatedMsgs },
+        };
+      });
+      await updateMessageStatus(messageId, "failed");
     }
   };
 

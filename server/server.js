@@ -712,7 +712,10 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Validate chunk envelope parameters
+    // Validate chunk envelope parameters & enforce limits (A-01)
+    const MAX_SERVER_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    const MAX_SERVER_CHUNKS = Math.ceil(MAX_SERVER_FILE_SIZE / (512 * 1024)) + 10; // ~110 chunks
+
     if (
       typeof chunk.transferId !== 'string' ||
       !chunk.transferId.trim() ||
@@ -722,12 +725,15 @@ io.on('connection', (socket) => {
       typeof chunk.totalChunks !== 'number' ||
       !Number.isInteger(chunk.totalChunks) ||
       chunk.totalChunks <= 0 ||
+      chunk.totalChunks > MAX_SERVER_CHUNKS ||
       typeof chunk.fileSize !== 'number' ||
       !Number.isInteger(chunk.fileSize) ||
-      chunk.fileSize <= 0
+      chunk.fileSize <= 0 ||
+      chunk.fileSize > MAX_SERVER_FILE_SIZE ||
+      chunk.chunkIndex >= chunk.totalChunks
     ) {
-      console.warn('[MALFORMED CHUNK] Malformed chunk parameters rejected.');
-      if (typeof callback === 'function') callback({ success: false, error: 'MALFORMED_CHUNK' });
+      console.warn('[MALFORMED CHUNK] Malformed or oversized chunk parameters rejected.');
+      if (typeof callback === 'function') callback({ success: false, error: 'TRANSFER_LIMIT_EXCEEDED' });
       return;
     }
 
