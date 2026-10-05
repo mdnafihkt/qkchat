@@ -7,7 +7,44 @@ const crypto = require('crypto');
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(helmet());
+
+// HTTP Security Headers (P-06)
+app.use(
+  helmet({
+    // Strict-Transport-Security (HSTS)
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    // X-Frame-Options: DENY
+    frameguard: {
+      action: 'deny',
+    },
+    // Referrer-Policy: no-referrer
+    referrerPolicy: {
+      policy: 'no-referrer',
+    },
+    // X-Content-Type-Options: nosniff
+    noSniff: true,
+    // Content Security Policy for API server
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  })
+);
+
+// Permissions-Policy header: Camera permitted for self (QR scanner), other powerful APIs disabled
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(self), microphone=(), geolocation=(), payment=(), usb=()'
+  );
+  next();
+});
 
 // Environment check
 const isProduction = process.env.NODE_ENV === 'production';

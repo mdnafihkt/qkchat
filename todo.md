@@ -162,11 +162,11 @@
 
 Enable via Helmet.
 
-- [ ] HSTS.
-- [ ] X-Frame-Options = `DENY`.
-- [ ] Referrer-Policy = `no-referrer`.
-- [ ] X-Content-Type-Options = `nosniff`.
-- [ ] Permissions-Policy (camera only).
+- [x] HSTS.
+- [x] X-Frame-Options = `DENY`.
+- [x] Referrer-Policy = `no-referrer`.
+- [x] X-Content-Type-Options = `nosniff`.
+- [x] Permissions-Policy (camera only).
 
 ---
 
