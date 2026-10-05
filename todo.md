@@ -215,9 +215,9 @@ Enable via Helmet.
 
 ## D-01 — Vite Production Build
 
-- [ ] Disable production source maps.
-- [ ] Verify no development artifacts are included.
-- [ ] Verify no secrets are bundled.
+- [x] Disable production source maps.
+- [x] Verify no development artifacts are included.
+- [x] Verify no secrets are bundled.
 
 ---
 
