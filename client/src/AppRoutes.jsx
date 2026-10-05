@@ -278,11 +278,20 @@ export default function AppRoutes({ SOCKET_URL }) {
     const updatedList = getStoredActiveRooms().filter((id) => id !== targetRoomId);
     setStoredActiveRooms(updatedList);
 
+    // Wipe in-memory crypto/auth keys and room state (C-02)
     setRooms((prev) => {
       const next = { ...prev };
-      delete next[targetRoomId];
+      if (next[targetRoomId]) {
+        next[targetRoomId].cryptoKey = null;
+        next[targetRoomId].authKey = null;
+        next[targetRoomId].messages = [];
+        delete next[targetRoomId];
+      }
       return next;
     });
+
+    sessionStorage.removeItem("qkchat_room_keys");
+    sessionStorage.removeItem("chat_key");
 
     if (activeRoomIdRef.current === targetRoomId) {
       if (updatedList.length > 0) {

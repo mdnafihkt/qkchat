@@ -359,10 +359,19 @@ export default function ChatPage({
     socket.on("receive_file_chunk", handleReceiveFileChunk);
     return () => {
       socket.off("receive_file_chunk", handleReceiveFileChunk);
-      // Clean up all pending timeouts when unmounting/changing socket
-      Object.values(activeTransfersRef.current).forEach((t) => {
-        if (t && t.timeoutId) clearTimeout(t.timeoutId);
+      // Clean up all pending timeouts and clear transfer chunk buffers when unmounting/changing room (C-02)
+      Object.keys(activeTransfersRef.current).forEach((transferId) => {
+        const t = activeTransfersRef.current[transferId];
+        if (t) {
+          if (t.timeoutId) clearTimeout(t.timeoutId);
+          if (Array.isArray(t.chunks)) {
+            t.chunks.length = 0;
+          }
+          t.chunks = null;
+        }
+        delete activeTransfersRef.current[transferId];
       });
+      setTransfers({});
     };
   }, [socket, cryptoKey, messages, activeRoomId, setRooms]);
 

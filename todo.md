@@ -184,9 +184,9 @@ Enable via Helmet.
 
 ## C-02 — Session Cleanup
 
-- [ ] Clear in-memory keys on logout/leave.
-- [ ] Clear temporary share payloads after use.
-- [ ] Clear abandoned transfer buffers.
+- [x] Clear in-memory keys on logout/leave.
+- [x] Clear temporary share payloads after use.
+- [x] Clear abandoned transfer buffers.
 
 ---
 

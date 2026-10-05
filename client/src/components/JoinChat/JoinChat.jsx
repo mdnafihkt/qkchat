@@ -23,6 +23,10 @@ export default function JoinChat({ onJoin }) {
     setIsJoining(true);
     try {
       await onJoin(joinId.trim(), joinPassword.trim(), "", null, joinSalt || null);
+      // Clear temporary share/QR payloads and input values after successful use (C-02)
+      setJoinId("");
+      setJoinSalt("");
+      setJoinPassword("");
       navigate("/chat");
     } catch (err) {
       setError(err.message || "Failed to connect to chat room");
