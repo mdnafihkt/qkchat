@@ -231,9 +231,9 @@ Enable via Helmet.
 
 ## D-03 — Netlify Deployment
 
-- [ ] Verify `_headers` includes CSP and cache headers.
-- [ ] Verify redirects do not expose sensitive endpoints.
-- [ ] Ensure `public/` contains only static assets.
+- [x] Verify `_headers` includes CSP and cache headers.
+- [x] Verify redirects do not expose sensitive endpoints.
+- [x] Ensure `public/` contains only static assets.
 
 ---
 
