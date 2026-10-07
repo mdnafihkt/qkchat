@@ -239,10 +239,10 @@ Enable via Helmet.
 
 ## D-04 — Dependency Audit
 
-- [ ] Remove unused packages.
-- [ ] Run `npm audit`.
-- [ ] Update vulnerable dependencies.
-- [ ] Keep `package-lock.json` committed.
+- [x] Remove unused packages.
+- [x] Run `npm audit`.
+- [x] Update vulnerable dependencies.
+- [x] Keep `package-lock.json` committed.
 
 ---
 
