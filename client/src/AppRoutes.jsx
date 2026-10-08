@@ -257,7 +257,15 @@ export default function AppRoutes({ SOCKET_URL }) {
   };
 
   // Leave / Close a specific Room
-  const handleLeaveRoom = async (targetRoomId) => {
+  const handleLeaveRoom = async (targetRoomId, options = {}) => {
+    const { bypassConfirm = false } = options || {};
+    if (!bypassConfirm) {
+      const confirmed = window.confirm(
+        "Are you sure you want to leave this room?\n\nWarning: All local encrypted message history, media, and encryption keys for this room will be permanently deleted."
+      );
+      if (!confirmed) return false;
+    }
+
     const peerId = getOrCreateRoomPeerId(targetRoomId);
     if (socketRef.current) {
       socketRef.current.emit("leave_room", { roomId: targetRoomId, peerId, clearSlot: true });
@@ -301,15 +309,57 @@ export default function AppRoutes({ SOCKET_URL }) {
         navigate("/");
       }
     }
+
+    return true;
   };
 
   // Delete Room for ALL peers in the room
-  const handleDeleteRoomForAll = async (targetRoomId) => {
+  const handleDeleteRoomForAll = async (targetRoomId, options = {}) => {
+    const { bypassConfirm = false } = options || {};
+    if (!bypassConfirm) {
+      const confirmed = window.confirm(
+        "Are you sure you want to delete this room for all participants?\n\nWarning: This will terminate the room session for everyone and permanently delete all local encrypted message history."
+      );
+      if (!confirmed) return false;
+    }
+
     if (socketRef.current) {
       socketRef.current.emit("delete_room", { roomId: targetRoomId });
     }
-    await handleLeaveRoom(targetRoomId);
+    await handleLeaveRoom(targetRoomId, { bypassConfirm: true });
     navigate("/");
+    return true;
+  };
+
+  // Clear local encrypted history for a specific room
+  const handleClearRoomHistory = async (targetRoomId, options = {}) => {
+    const { bypassConfirm = false } = options || {};
+    if (!bypassConfirm) {
+      const confirmed = window.confirm(
+        "Are you sure you want to delete all encrypted local history for this room?\n\nWarning: All locally stored encrypted messages and media will be permanently destroyed. This action cannot be undone."
+      );
+      if (!confirmed) return false;
+    }
+
+    await clearRoomMessages(targetRoomId).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.error(`Failed to clear ledger for room ${targetRoomId}:`, err);
+      }
+    });
+    revokeRoomBlobUrls(targetRoomId);
+
+    setRooms((prev) => {
+      const next = { ...prev };
+      if (next[targetRoomId]) {
+        next[targetRoomId] = {
+          ...next[targetRoomId],
+          messages: [],
+        };
+      }
+      return next;
+    });
+
+    return true;
   };
 
   // Socket setup
@@ -656,7 +706,7 @@ export default function AppRoutes({ SOCKET_URL }) {
           navigate("/");
           return;
         }
-        await handleLeaveRoom(rId);
+        await handleLeaveRoom(rId, { bypassConfirm: true });
         navigate("/");
       }
     });
@@ -1031,6 +1081,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               onJoinNewRoom={handleJoinWithCredentials}
               onLeaveRoom={handleLeaveRoom}
               onDeleteRoomForAll={handleDeleteRoomForAll}
+              onClearLocalHistory={handleClearRoomHistory}
               onUnlockRoom={handleUnlockRoom}
               onUpdateRetentionPeriod={handleUpdateRetentionPeriod}
               onSetRoomName={handleSetRoomName}

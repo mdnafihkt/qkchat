@@ -9,6 +9,7 @@ import {
   Copy,
   CheckCheck,
   QrCode,
+  Eraser,
   Trash2,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ export default function ChatSidebar({
   retentionPeriod = 86400000,
   onUpdateRetentionPeriod,
   onShowQRCode,
+  onClearLocalHistory,
   onDeleteRoomForAll,
   onLeaveRoom,
 }) {
@@ -269,24 +271,30 @@ export default function ChatSidebar({
                   >
                     <h4 className="danger-zone-title">Danger Zone</h4>
                     <p className="settings-desc">
-                      Destructive actions for this room. Deleting the room destroys
-                      local data and terminates the room session for all peers.
+                      Destructive actions for this room. Clearing history or deleting the room
+                      permanently destroys local encrypted data.
                     </p>
+
+                    {onClearLocalHistory && (
+                      <button
+                        type="button"
+                        className="btn-danger-clear"
+                        onClick={() => onClearLocalHistory(activeRoomId)}
+                        title="Delete encrypted local message history"
+                      >
+                        <Eraser size={16} />
+                        <span>Clear Local History</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"
                       className="btn-danger-delete"
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            "Are you sure you want to delete this room for all participants? This will immediately clear room data for everyone."
-                          )
-                        ) {
-                          if (onDeleteRoomForAll) {
-                            onDeleteRoomForAll(activeRoomId);
-                          } else if (onLeaveRoom) {
-                            onLeaveRoom(activeRoomId);
-                          }
+                        if (onDeleteRoomForAll) {
+                          onDeleteRoomForAll(activeRoomId);
+                        } else if (onLeaveRoom) {
+                          onLeaveRoom(activeRoomId);
                         }
                       }}
                       title="Delete room for all peers"

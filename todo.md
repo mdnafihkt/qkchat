@@ -250,9 +250,9 @@ Enable via Helmet.
 
 ## U-01 — Confirmation Dialogs
 
-- [ ] Confirm before leaving a room.
-- [ ] Confirm before deleting a room.
-- [ ] Warn before deleting encrypted local history.
+- [x] Confirm before leaving a room.
+- [x] Confirm before deleting a room.
+- [x] Warn before deleting encrypted local history.
 
 ---
 

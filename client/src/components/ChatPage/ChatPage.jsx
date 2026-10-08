@@ -49,6 +49,7 @@ export default function ChatPage({
   currentRoom = null,
   setRooms,
   onLeaveRoom,
+  onClearLocalHistory,
   onDeleteRoomForAll,
   onUnlockRoom,
   onUpdateRetentionPeriod,
@@ -862,6 +863,7 @@ export default function ChatPage({
           retentionPeriod={retentionPeriod}
           onUpdateRetentionPeriod={onUpdateRetentionPeriod}
           onShowQRCode={() => setShowQRCode(true)}
+          onClearLocalHistory={onClearLocalHistory}
           onDeleteRoomForAll={onDeleteRoomForAll}
           onLeaveRoom={onLeaveRoom}
         />
