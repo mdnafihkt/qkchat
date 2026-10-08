@@ -266,11 +266,7 @@ export default function HomeSelection({
                 key={room.roomId}
                 className={`room-card ${room.isLocked ? "locked" : ""}`}
                 onClick={() => {
-                  if (room.isLocked && onUnlockRoom) {
-                    onUnlockRoom(room.roomId);
-                  } else {
-                    onSelectRoom(room.roomId);
-                  }
+                  onSelectRoom(room.roomId);
                 }}
                 initial={{ opacity: 0, y: 20, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -318,7 +314,7 @@ export default function HomeSelection({
                 </div>
 
                 <div className="room-card-footer">
-                  <span className="enter-room-text">Enter Chat</span>
+                  <span className="enter-room-text">{room.isLocked ? "Unlock Room" : "Enter Chat"}</span>
                   <ChevronRight size={16} className="arrow-icon" />
                 </div>
               </Motion.div>

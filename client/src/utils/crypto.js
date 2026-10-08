@@ -8,6 +8,9 @@ export function generateRandomSalt() {
 
 // Derives an AES-GCM key from a password and 16-byte salt using PBKDF2
 export async function deriveKey(password, roomSalt) {
+    if (!password || typeof password !== 'string' || !password.trim()) {
+        throw new Error('A valid non-empty password is required for key derivation.');
+    }
     const enc = new TextEncoder();
     let salt;
 
@@ -169,6 +172,9 @@ export async function decryptBinary(key, encryptedData, ivBase64, additionalData
 
 // Derives a domain-separated HMAC key from password and roomSalt using PBKDF2
 export async function deriveAuthKey(password, roomSalt) {
+    if (!password || typeof password !== 'string' || !password.trim()) {
+        throw new Error('A valid non-empty password is required for auth key derivation.');
+    }
     const enc = new TextEncoder();
     let salt;
 

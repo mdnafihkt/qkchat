@@ -258,9 +258,9 @@ Enable via Helmet.
 
 ## U-02 — Session Locking
 
-- [ ] Lock rooms after refresh when key is unavailable.
-- [ ] Require password for Session Recovery.
-- [ ] Never auto-unlock without successful key derivation.
+- [x] Lock rooms after refresh when key is unavailable.
+- [x] Require password for Session Recovery.
+- [x] Never auto-unlock without successful key derivation.
 
 ---
 

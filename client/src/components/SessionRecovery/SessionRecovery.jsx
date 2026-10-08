@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, KeyRound } from "lucide-react";
 import "./SessionRecovery.css";
@@ -9,24 +9,32 @@ export default function SessionRecovery({ roomId, onRecoveryComplete }) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (!roomId) {
+      navigate("/");
+    }
+  }, [roomId, navigate]);
+
   const handleRecovery = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!password.trim()) {
-      setError("Password is required.");
+    if (!password || !password.trim()) {
+      setError("Password is required to recover session.");
       return;
     }
 
     setIsLoading(true);
     try {
-      await onRecoveryComplete(roomId, password);
+      await onRecoveryComplete(roomId, password.trim());
       navigate("/chat");
     } catch (err) {
       if (import.meta.env.DEV) {
         console.error("Recovery failed:", err);
       }
-      setError("Failed to recover session. Please check your password and try again.");
+      setError(
+        err?.message || "Failed to recover session. Please check your password and try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +87,7 @@ export default function SessionRecovery({ roomId, onRecoveryComplete }) {
             <button
               type="submit"
               className="btn-primary"
-              disabled={isLoading}
+              disabled={isLoading || !password.trim()}
             >
               {isLoading ? "Recovering..." : "Recover Session"}
             </button>

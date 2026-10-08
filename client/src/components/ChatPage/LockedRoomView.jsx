@@ -21,8 +21,8 @@ export default function LockedRoomView({
     try {
       await onUnlockRoom(activeRoomId, unlockPassword.trim());
       setUnlockPassword("");
-    } catch {
-      setUnlockError("Failed to unlock room. Check your password.");
+    } catch (err) {
+      setUnlockError(err?.message || "Failed to unlock room. Check your password.");
     } finally {
       setIsUnlocking(false);
     }

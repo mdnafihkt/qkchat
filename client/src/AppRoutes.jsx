@@ -222,9 +222,8 @@ export default function AppRoutes({ SOCKET_URL }) {
       }
       if (records.length > 0) {
         const hasFailedMessages = decryptedMessages.some((m) => m.text === "[Encrypted message - Failed to decrypt]");
-        const hasSuccessfulMessages = decryptedMessages.some((m) => m.text !== "[Encrypted message - Failed to decrypt]");
-        if (hasFailedMessages && !hasSuccessfulMessages) {
-          throw new Error("Invalid password: Failed to decrypt messages");
+        if (hasFailedMessages) {
+          throw new Error("Invalid password: Failed to decrypt room history");
         }
       }
       initRoomSequence(targetRoomId, decryptedMessages);
@@ -845,13 +844,22 @@ export default function AppRoutes({ SOCKET_URL }) {
     joinSalt = null
   ) => {
     try {
+      if (!joinRoomId || typeof joinRoomId !== "string" || !joinRoomId.trim()) {
+        throw new Error("A valid Room ID is required.");
+      }
+      if (!joinPassword || typeof joinPassword !== "string" || !joinPassword.trim()) {
+        throw new Error("Password is required to derive encryption keys.");
+      }
+      const cleanRoomId = joinRoomId.trim();
+      const cleanPassword = joinPassword.trim();
+
       const activeSock = initSocketIfNeeded();
 
       // Resolve room salt: explicitly passed -> stored in metadata -> query server -> generate new
-      let salt = joinSalt || getStoredRoomSalt(joinRoomId);
+      let salt = joinSalt || getStoredRoomSalt(cleanRoomId);
       if (!salt && activeSock) {
         salt = await new Promise((resolve) => {
-          activeSock.emit("get_room_salt", { roomId: joinRoomId }, (res) => {
+          activeSock.emit("get_room_salt", { roomId: cleanRoomId }, (res) => {
             resolve(res && res.success && res.salt ? res.salt : null);
           });
           setTimeout(() => resolve(null), 1200);
@@ -862,24 +870,24 @@ export default function AppRoutes({ SOCKET_URL }) {
         salt = generateRandomSalt();
       }
 
-      setStoredRoomSalt(joinRoomId, salt);
-      const key = await deriveKey(joinPassword, salt);
-      const authKey = await deriveAuthKey(joinPassword, salt);
+      setStoredRoomSalt(cleanRoomId, salt);
+      const key = await deriveKey(cleanPassword, salt);
+      const authKey = await deriveAuthKey(cleanPassword, salt);
       const authKeyHex = await exportAuthKeyHex(authKey);
 
       // Store custom room name if provided
       if (joinRoomName && joinRoomName.trim()) {
-        setStoredRoomName(joinRoomId, joinRoomName.trim());
+        setStoredRoomName(cleanRoomId, joinRoomName.trim());
       }
 
       // Store initial retention period if provided
       if (joinRetentionPeriod) {
-        localStorage.setItem(`qkchat_retention_${joinRoomId}`, joinRetentionPeriod.toString());
+        localStorage.setItem(`qkchat_retention_${cleanRoomId}`, joinRetentionPeriod.toString());
       }
 
       // Request join challenge nonce from server
       const challengeNonce = await new Promise((resolve, reject) => {
-        activeSock.emit("get_join_challenge", { roomId: joinRoomId }, (res) => {
+        activeSock.emit("get_join_challenge", { roomId: cleanRoomId }, (res) => {
           if (res && res.success && res.nonce) {
             resolve(res.nonce);
           } else {
@@ -893,15 +901,15 @@ export default function AppRoutes({ SOCKET_URL }) {
       const authProof = await signNonce(authKey, challengeNonce);
 
       // Verify and load messages from ledger (decrypts existing messages with key)
-      const initialMsgs = await loadMessagesFromLedger(joinRoomId, key);
+      const initialMsgs = await loadMessagesFromLedger(cleanRoomId, key);
 
       // Get or create per-room peer ID and emit authenticated join room on socket
-      const peerId = getOrCreateRoomPeerId(joinRoomId);
+      const peerId = getOrCreateRoomPeerId(cleanRoomId);
       await new Promise((resolve, reject) => {
         activeSock.emit(
           "join_room",
           {
-            roomId: joinRoomId,
+            roomId: cleanRoomId,
             peerId,
             salt,
             authProof,
@@ -926,20 +934,20 @@ export default function AppRoutes({ SOCKET_URL }) {
 
       // Update active room list in localStorage only after successful authentication
       const currentList = getStoredActiveRooms();
-      if (!currentList.includes(joinRoomId)) {
-        currentList.push(joinRoomId);
+      if (!currentList.includes(cleanRoomId)) {
+        currentList.push(cleanRoomId);
         setStoredActiveRooms(currentList);
       }
 
-      autoSync(activeSock, joinRoomId);
+      autoSync(activeSock, cleanRoomId);
 
-      const roomName = getStoredRoomNames()[joinRoomId] || (joinRoomName ? joinRoomName.trim() : "");
-      const retention = parseInt(localStorage.getItem(`qkchat_retention_${joinRoomId}`) || "86400000");
+      const roomName = getStoredRoomNames()[cleanRoomId] || (joinRoomName ? joinRoomName.trim() : "");
+      const retention = parseInt(localStorage.getItem(`qkchat_retention_${cleanRoomId}`) || "86400000");
 
       setRooms((prev) => ({
         ...prev,
-        [joinRoomId]: {
-          roomId: joinRoomId,
+        [cleanRoomId]: {
+          roomId: cleanRoomId,
           roomName,
           cryptoKey: key,
           authKey,
@@ -952,7 +960,7 @@ export default function AppRoutes({ SOCKET_URL }) {
         },
       }));
 
-      setActiveRoomId(joinRoomId);
+      setActiveRoomId(cleanRoomId);
       return Promise.resolve();
     } catch (err) {
       if (import.meta.env.DEV) {
@@ -995,7 +1003,10 @@ export default function AppRoutes({ SOCKET_URL }) {
   };
 
   const handleUnlockRoom = async (targetRoomId, password) => {
-    return handleJoinWithCredentials(targetRoomId, password);
+    if (!password || typeof password !== "string" || !password.trim()) {
+      throw new Error("Password is required to unlock this room.");
+    }
+    return handleJoinWithCredentials(targetRoomId, password.trim());
   };
 
   const handleUpdateRetentionPeriod = async (targetRoomId, newPeriod) => {
@@ -1062,7 +1073,10 @@ export default function AppRoutes({ SOCKET_URL }) {
             <SessionRecovery
               roomId={activeRoomId || (getStoredActiveRooms()[0] || "")}
               onRecoveryComplete={async (rId, pwd) => {
-                await handleUnlockRoom(rId, pwd);
+                if (!pwd || typeof pwd !== "string" || !pwd.trim()) {
+                  throw new Error("Password is required for session recovery.");
+                }
+                await handleUnlockRoom(rId, pwd.trim());
                 navigate("/chat");
               }}
             />
