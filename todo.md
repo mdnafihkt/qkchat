@@ -276,11 +276,11 @@ Enable via Helmet.
 
 ## Frontend
 
-- [ ] No debug logs in production.
-- [ ] No plaintext encryption keys stored.
-- [ ] No plaintext files stored in IndexedDB.
-- [ ] Blob URLs revoked correctly.
-- [ ] Cache headers applied.
+- [x] No debug logs in production.
+- [x] No plaintext encryption keys stored.
+- [x] No plaintext files stored in IndexedDB.
+- [x] Blob URLs revoked correctly.
+- [x] Cache headers applied.
 
 ## Security
 
