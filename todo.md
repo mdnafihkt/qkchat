@@ -268,11 +268,11 @@ Enable via Helmet.
 
 ## Backend
 
-- [ ] No sensitive logs in Railway.
-- [ ] CORS restricted to production.
-- [ ] Rate limiting works across reconnects.
-- [ ] Connection limits enforced.
-- [ ] Empty rooms removed automatically.
+- [x] No sensitive logs in Railway.
+- [x] CORS restricted to production.
+- [x] Rate limiting works across reconnects.
+- [x] Connection limits enforced.
+- [x] Empty rooms removed automatically.
 
 ## Frontend
 
