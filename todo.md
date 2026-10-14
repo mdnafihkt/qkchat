@@ -292,6 +292,6 @@ Enable via Helmet.
 
 ## UX
 
-- [ ] Confirmation before destructive actions.
-- [ ] Session recovery works with non-extractable keys.
-- [ ] Local data cleanup verified.
+- [x] Confirmation before destructive actions.
+- [x] Session recovery works with non-extractable keys.
+- [x] Local data cleanup verified.
