@@ -284,11 +284,11 @@ Enable via Helmet.
 
 ## Security
 
-- [ ] CSP enabled.
-- [ ] Helmet headers enabled.
-- [ ] Replay protection active.
-- [ ] File metadata authenticated.
-- [ ] Room join challenge-response implemented.
+- [x] CSP enabled.
+- [x] Helmet headers enabled.
+- [x] Replay protection active.
+- [x] File metadata authenticated.
+- [x] Room join challenge-response implemented.
 
 ## UX
 
