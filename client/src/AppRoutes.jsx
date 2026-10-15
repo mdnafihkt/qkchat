@@ -39,6 +39,7 @@ import StartChat from "./components/StartChat/StartChat";
 import JoinChat from "./components/JoinChat/JoinChat";
 import ChatPage from "./components/ChatPage/ChatPage";
 import SessionRecovery from "./components/SessionRecovery/SessionRecovery";
+import ConfirmDialog, { ToastNotification } from "./components/ConfirmDialog";
 
 // Helper component to trigger error toast notification and redirect Home
 function FallbackRedirect({ onError }) {
@@ -57,20 +58,54 @@ export default function AppRoutes({ SOCKET_URL }) {
   const [rooms, setRooms] = useState({}); // { [roomId]: { roomId, roomName, cryptoKey, messages, isConnected, unreadCount, retentionPeriod, isLocked } }
   const [activeRoomId, setActiveRoomId] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
-  const [errorToast, setErrorToast] = useState("");
+  const [toast, setToast] = useState(null); // { id, message, type }
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
-  const triggerErrorToast = (msg) => {
-    setErrorToast(msg);
+  const showToast = (message, type = "info") => {
+    const id = Date.now() + Math.random().toString(36).substring(2, 6);
+    setToast({ id, message, type });
+  };
+
+  const dismissToast = (id) => {
+    setToast((prev) => (prev && prev.id === id ? null : prev));
   };
 
   useEffect(() => {
-    if (errorToast) {
+    if (toast) {
       const timer = setTimeout(() => {
-        setErrorToast("");
+        setToast(null);
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [errorToast]);
+  }, [toast]);
+
+  const requestConfirm = ({
+    title = "Confirm Action",
+    message = "Are you sure you want to proceed?",
+    warning = null,
+    confirmText = "Confirm",
+    cancelText = "Cancel",
+    type = "danger",
+  }) => {
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        title,
+        message,
+        warning,
+        confirmText,
+        cancelText,
+        type,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          resolve(true);
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+          resolve(false);
+        },
+      });
+    });
+  };
 
   // Refs for stale closures in socket handlers
   const roomsRef = useRef({});
@@ -259,9 +294,14 @@ export default function AppRoutes({ SOCKET_URL }) {
   const handleLeaveRoom = async (targetRoomId, options = {}) => {
     const { bypassConfirm = false } = options || {};
     if (!bypassConfirm) {
-      const confirmed = window.confirm(
-        "Are you sure you want to leave this room?\n\nWarning: All local encrypted message history, media, and encryption keys for this room will be permanently deleted."
-      );
+      const confirmed = await requestConfirm({
+        title: "Leave Room",
+        message: "Are you sure you want to leave this room?",
+        warning: "All local encrypted message history, media, and encryption keys for this room will be permanently deleted.",
+        confirmText: "Leave Room",
+        cancelText: "Cancel",
+        type: "danger",
+      });
       if (!confirmed) return false;
     }
 
@@ -316,9 +356,14 @@ export default function AppRoutes({ SOCKET_URL }) {
   const handleDeleteRoomForAll = async (targetRoomId, options = {}) => {
     const { bypassConfirm = false } = options || {};
     if (!bypassConfirm) {
-      const confirmed = window.confirm(
-        "Are you sure you want to delete this room for all participants?\n\nWarning: This will terminate the room session for everyone and permanently delete all local encrypted message history."
-      );
+      const confirmed = await requestConfirm({
+        title: "Delete Room for All",
+        message: "Are you sure you want to delete this room for all participants?",
+        warning: "This will terminate the room session for everyone and permanently delete all local encrypted message history.",
+        confirmText: "Delete for All",
+        cancelText: "Cancel",
+        type: "danger",
+      });
       if (!confirmed) return false;
     }
 
@@ -334,9 +379,14 @@ export default function AppRoutes({ SOCKET_URL }) {
   const handleClearRoomHistory = async (targetRoomId, options = {}) => {
     const { bypassConfirm = false } = options || {};
     if (!bypassConfirm) {
-      const confirmed = window.confirm(
-        "Are you sure you want to delete all encrypted local history for this room?\n\nWarning: All locally stored encrypted messages and media will be permanently destroyed. This action cannot be undone."
-      );
+      const confirmed = await requestConfirm({
+        title: "Clear Local History",
+        message: "Are you sure you want to delete all encrypted local history for this room?",
+        warning: "All locally stored encrypted messages and media will be permanently destroyed. This action cannot be undone.",
+        confirmText: "Clear History",
+        cancelText: "Cancel",
+        type: "danger",
+      });
       if (!confirmed) return false;
     }
 
@@ -1099,6 +1149,7 @@ export default function AppRoutes({ SOCKET_URL }) {
               onUnlockRoom={handleUnlockRoom}
               onUpdateRetentionPeriod={handleUpdateRetentionPeriod}
               onSetRoomName={handleSetRoomName}
+              showToast={showToast}
             />
           }
         />
@@ -1106,20 +1157,27 @@ export default function AppRoutes({ SOCKET_URL }) {
         {/* Catch-all fallback route for non-existing pages */}
         <Route
           path="*"
-          element={<FallbackRedirect onError={triggerErrorToast} />}
+          element={<FallbackRedirect onError={(msg) => showToast(msg, "error")} />}
         />
       </Routes>
 
-      {/* Global Error Notification Toast */}
-      {errorToast && (
-        <div className="global-error" role="alert">
-          <AlertCircle size={18} />
-          <span>{errorToast}</span>
-          <button onClick={() => setErrorToast("")} title="Dismiss notification">
-            <X size={16} />
-          </button>
-        </div>
+      {/* Custom Confirmation Dialogue (Toast/Modal) */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={Boolean(confirmDialog)}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          warning={confirmDialog.warning}
+          confirmText={confirmDialog.confirmText}
+          cancelText={confirmDialog.cancelText}
+          type={confirmDialog.type}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={confirmDialog.onCancel}
+        />
       )}
+
+      {/* Global Toast Notification System */}
+      <ToastNotification toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

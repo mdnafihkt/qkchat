@@ -1,3 +1,12 @@
+// Load environment variables from .env file if available (Node.js 20.6+)
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // .env file is optional (e.g. in cloud container environments)
+  }
+}
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -50,29 +59,30 @@ app.use((req, res, next) => {
 // Environment check
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Default production domains (Netlify production custom domain & netlify.app domain)
-const defaultProductionOrigins = [
-  'https://qkchat.daimens.com',
-  'https://qkchat.netlify.app',
-];
-
 // Helper to check for localhost / 127.0.0.1 origins
 function isLocalhostOrigin(origin) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 }
 
-// Parse allowed origins from environment or use default production domains
-const envOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-      .map((o) => o.trim())
-      .filter((o) => o && o !== '*')
-  : defaultProductionOrigins;
+// Parse allowed frontend origins dynamically from environment variables
+// Supports ALLOWED_ORIGINS (comma-separated list) or FRONTEND_URL
+const rawOrigins = process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '';
+const envOrigins = rawOrigins
+  .split(',')
+  .map((o) => o.trim())
+  .filter((o) => o && o !== '*');
 
 // Build the active allowed origins set
-// In production: strictly exclude wildcard origins and any localhost origins
+// In production: strictly require configured origins from environment and reject localhost/wildcards
 const allowedOrigins = isProduction
   ? envOrigins.filter((origin) => !isLocalhostOrigin(origin) && origin !== '*')
-  : envOrigins;
+  : (envOrigins.length > 0 ? envOrigins : ['http://localhost:5173', 'http://127.0.0.1:5173']);
+
+if (isProduction && allowedOrigins.length === 0) {
+  console.warn(
+    '[WARN] No allowed origins configured in ALLOWED_ORIGINS or FRONTEND_URL. Production CORS will reject cross-origin requests.'
+  );
+}
 
 const corsOptions = {
   origin: (origin, callback) => {

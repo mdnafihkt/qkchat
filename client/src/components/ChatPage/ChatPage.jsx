@@ -54,6 +54,7 @@ export default function ChatPage({
   onUnlockRoom,
   onUpdateRetentionPeriod,
   onSetRoomName,
+  showToast,
 }) {
   const [newMessage, setNewMessage] = useState("");
   const [showQRCode, setShowQRCode] = useState(false);
@@ -563,21 +564,27 @@ export default function ChatPage({
 
     // Enforce maximum file size (A-01)
     if (file.size > MAX_FILE_SIZE) {
-      alert(
-        `File size must be less than 50MB. Your file is ${(
-          file.size /
-          (1024 * 1024)
-        ).toFixed(2)}MB.`
-      );
+      const msg = `File size must be less than 50MB. Your file is ${(
+        file.size /
+        (1024 * 1024)
+      ).toFixed(2)}MB.`;
+      if (showToast) {
+        showToast(msg, "warning");
+      } else {
+        alert(msg);
+      }
       return;
     }
 
     // Limit simultaneous file transfers (A-01)
     const currentTransferCount = Object.keys(transfers).length;
     if (currentTransferCount >= MAX_SIMULTANEOUS_TRANSFERS) {
-      alert(
-        `Too many concurrent transfers. Please wait for ongoing transfers to finish (max ${MAX_SIMULTANEOUS_TRANSFERS}).`
-      );
+      const msg = `Too many concurrent transfers. Please wait for ongoing transfers to finish (max ${MAX_SIMULTANEOUS_TRANSFERS}).`;
+      if (showToast) {
+        showToast(msg, "warning");
+      } else {
+        alert(msg);
+      }
       return;
     }
 
